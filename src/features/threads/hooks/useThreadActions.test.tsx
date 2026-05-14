@@ -186,6 +186,59 @@ describe("useThreadActions", () => {
     expect(loadedThreadsRef.current["thread-1"]).toBe(true);
   });
 
+  it("reuses one in-flight codex start for concurrent callers", async () => {
+    let resolveStart:
+      | ((value: { result: { thread: { id: string } } }) => void)
+      | null = null;
+    vi.mocked(startThread).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+
+    const { result, dispatch, loadedThreadsRef } = renderActions();
+
+    let firstStart: Promise<string | null>;
+    let secondStart: Promise<string | null>;
+    await act(async () => {
+      firstStart = result.current.startThreadForWorkspace("ws-1", { activate: false });
+      secondStart = result.current.startThreadForWorkspace("ws-1", { activate: true });
+    });
+
+    expect(startThread).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveStart?.({ result: { thread: { id: "thread-shared" } } });
+    });
+
+    await expect(firstStart!).resolves.toBe("thread-shared");
+    await expect(secondStart!).resolves.toBe("thread-shared");
+    expect(startThread).toHaveBeenCalledTimes(1);
+    expect(
+      dispatch.mock.calls.filter(([action]) => action.type === "ensureThread"),
+    ).toHaveLength(1);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-shared",
+      engine: "codex",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "markCodexAcceptedTurn",
+      threadId: "thread-shared",
+      fact: "empty-draft",
+      source: "thread-start",
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "thread-shared",
+    });
+    expect(loadedThreadsRef.current["thread-shared"]).toBe(true);
+  });
+
   it("reconnects workspace and retries when codex start thread reports not connected", async () => {
     vi.mocked(startThread)
       .mockRejectedValueOnce(new Error("workspace not connected"))
@@ -2003,6 +2056,49 @@ describe("useThreadActions", () => {
       workspaceId: "ws-1",
       cursor: "catalog::offset:200",
     });
+  });
+
+  it("uses project visible root count as the Claude native list window", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([
+      {
+        sessionId: "claude-visible-200",
+        firstMessage: "Claude session inside configured window",
+        updatedAt: 7000,
+      },
+    ]);
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [],
+      nextCursor: null,
+      partialSource: null,
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace({
+        ...workspace,
+        settings: {
+          ...workspace.settings,
+          visibleThreadRootCount: 200,
+        },
+      });
+    });
+
+    expect(listClaudeSessions).toHaveBeenCalledWith("/tmp/codex", 200);
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "claude:claude-visible-200",
+        name: "Claude session inside configured window",
+        updatedAt: 7000,
+        engineSource: "claude",
+      },
+    ]);
   });
 
   it("keeps startup first-page hydration out of native and project session catalogs", async () => {

@@ -205,6 +205,9 @@ export function useThreadActionsSessionRuntime({
   workspacePathsByIdRef,
 }: UseThreadActionsSessionRuntimeOptions) {
   const claudeRewindInFlightByThreadRef = useRef<Record<string, boolean>>({});
+  const codexStartInFlightByKeyRef = useRef<
+    Record<string, Promise<string | null> | undefined>
+  >({});
 
   const startThreadForWorkspace = useCallback(
     async (
@@ -218,6 +221,7 @@ export function useThreadActionsSessionRuntime({
       const shouldActivate = options?.activate !== false;
       const engine = options?.engine;
       const folderId = options?.folderId?.trim() || null;
+      const codexStartInFlightKey = `${workspaceId}:codex:${folderId ?? "__root__"}`;
       const resolveStartedThread = (
         response: Record<string, unknown> | null | undefined,
       ) => {
@@ -276,62 +280,90 @@ export function useThreadActionsSessionRuntime({
         return threadId;
       }
 
-      onDebug?.({
-        id: `${Date.now()}-client-thread-start`,
-        timestamp: Date.now(),
-        source: "client",
-        label: "thread/start",
-        payload: { workspaceId },
-      });
-      try {
-        const response = await startThreadService(workspaceId);
+      const runCodexStart = async () => {
         onDebug?.({
-          id: `${Date.now()}-server-thread-start`,
+          id: `${Date.now()}-client-thread-start`,
           timestamp: Date.now(),
-          source: "server",
-          label: "thread/start response",
-          payload: response,
+          source: "client",
+          label: "thread/start",
+          payload: { workspaceId },
         });
-        return resolveStartedThread(response);
-      } catch (error) {
-        if (isWorkspaceNotConnectedError(error)) {
+        try {
+          const response = await startThreadService(workspaceId);
           onDebug?.({
-            id: `${Date.now()}-client-workspace-reconnect-before-thread-start`,
+            id: `${Date.now()}-server-thread-start`,
             timestamp: Date.now(),
-            source: "client",
-            label: "workspace/reconnect before thread start",
-            payload: { workspaceId },
+            source: "server",
+            label: "thread/start response",
+            payload: response,
           });
-          try {
-            await connectWorkspaceService(workspaceId);
-            const retryResponse = await startThreadService(workspaceId);
+          return resolveStartedThread(response);
+        } catch (error) {
+          if (isWorkspaceNotConnectedError(error)) {
             onDebug?.({
-              id: `${Date.now()}-server-thread-start-retry`,
+              id: `${Date.now()}-client-workspace-reconnect-before-thread-start`,
               timestamp: Date.now(),
-              source: "server",
-              label: "thread/start retry response",
-              payload: retryResponse,
+              source: "client",
+              label: "workspace/reconnect before thread start",
+              payload: { workspaceId },
             });
-            return resolveStartedThread(retryResponse);
-          } catch (retryError) {
-            onDebug?.({
-              id: `${Date.now()}-client-thread-start-error`,
-              timestamp: Date.now(),
-              source: "error",
-              label: "thread/start error",
-              payload: retryError instanceof Error ? retryError.message : String(retryError),
-            });
-            throw retryError;
+            try {
+              await connectWorkspaceService(workspaceId);
+              const retryResponse = await startThreadService(workspaceId);
+              onDebug?.({
+                id: `${Date.now()}-server-thread-start-retry`,
+                timestamp: Date.now(),
+                source: "server",
+                label: "thread/start retry response",
+                payload: retryResponse,
+              });
+              return resolveStartedThread(retryResponse);
+            } catch (retryError) {
+              onDebug?.({
+                id: `${Date.now()}-client-thread-start-error`,
+                timestamp: Date.now(),
+                source: "error",
+                label: "thread/start error",
+                payload: retryError instanceof Error ? retryError.message : String(retryError),
+              });
+              throw retryError;
+            }
           }
+          onDebug?.({
+            id: `${Date.now()}-client-thread-start-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/start error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
         }
+      };
+
+      const existingStart = codexStartInFlightByKeyRef.current[codexStartInFlightKey];
+      if (existingStart) {
         onDebug?.({
-          id: `${Date.now()}-client-thread-start-error`,
+          id: `${Date.now()}-client-thread-start-reuse`,
           timestamp: Date.now(),
-          source: "error",
-          label: "thread/start error",
-          payload: error instanceof Error ? error.message : String(error),
+          source: "client",
+          label: "thread/start reuse",
+          payload: { workspaceId, folderId },
         });
-        throw error;
+        const threadId = await existingStart;
+        if (threadId && shouldActivate) {
+          dispatch({ type: "setActiveThreadId", workspaceId, threadId });
+        }
+        return threadId;
+      }
+
+      const startPromise = runCodexStart();
+      codexStartInFlightByKeyRef.current[codexStartInFlightKey] = startPromise;
+      try {
+        return await startPromise;
+      } finally {
+        if (codexStartInFlightByKeyRef.current[codexStartInFlightKey] === startPromise) {
+          delete codexStartInFlightByKeyRef.current[codexStartInFlightKey];
+        }
       }
     },
     [dispatch, loadedThreadsRef, onDebug],

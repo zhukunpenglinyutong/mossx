@@ -53,6 +53,10 @@ import {
 } from "./useThreadActions.workspacePath";
 import { useAutomaticRuntimeRecovery, type AutomaticRuntimeRecoverySource } from "./useAutomaticRuntimeRecovery";
 import {
+  DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+  normalizeVisibleThreadRootCount,
+} from "../../app/constants";
+import {
   createArchiveClaudeThreadAction,
   createArchiveThreadAction,
   createDeleteThreadForWorkspaceAction,
@@ -151,6 +155,10 @@ const GEMINI_SESSION_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const SESSION_CATALOG_PAGE_SIZE = 200;
+const MIN_NATIVE_SESSION_LIST_LIMIT = Math.min(
+  SESSION_CATALOG_PAGE_SIZE,
+  DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+);
 const THREAD_LIST_CURSOR_SOURCE_SEPARATOR = "::";
 const THREAD_LIST_CURSOR_CATALOG_ROOT = "__root__";
 
@@ -189,6 +197,16 @@ function decodeThreadListCursorState(cursor: string): ThreadListCursorState {
     return { source: "catalog", cursor: trimmedCursor };
   }
   return { source: "runtime", cursor: trimmedCursor };
+}
+
+export function resolveNativeSessionListLimit(workspace: WorkspaceInfo): number {
+  const visibleRootCount = normalizeVisibleThreadRootCount(
+    workspace.settings.visibleThreadRootCount,
+  );
+  return Math.min(
+    SESSION_CATALOG_PAGE_SIZE,
+    Math.max(MIN_NATIVE_SESSION_LIST_LIMIT, visibleRootCount),
+  );
 }
 
 function resolveThreadListCursorForDisplay(params: {
@@ -1806,6 +1824,7 @@ export function useThreadActions({
         const mergedById = new Map<string, ThreadSummary>();
         allSummaries.forEach((entry) => mergedById.set(entry.id, entry));
         const lastGoodThreadSummaries = getLastGoodThreadSummaries(workspace.id);
+        const nativeSessionListLimit = resolveNativeSessionListLimit(workspace);
         const opencodeSessionsPromise = includeOpenCodeSessions && !shouldDeferFullSessionCatalog
           ? withTimeout(
               getOpenCodeSessionListService(workspace.id),
@@ -1819,7 +1838,7 @@ export function useThreadActions({
           shouldDeferFullSessionCatalog
             ? Promise.resolve([])
             : withTimeout(
-                listClaudeSessionsService(workspace.path, 50),
+                listClaudeSessionsService(workspace.path, nativeSessionListLimit),
                 NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
               ),
           opencodeSessionsPromise,
