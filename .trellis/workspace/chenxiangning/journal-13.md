@@ -988,3 +988,36 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 458: 稳定会话创建与 Claude 列表窗口
+
+**Date**: 2026-05-14
+**Task**: 稳定会话创建与 Claude 列表窗口
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+修复 Codex 新会话慢启动并发重复创建：同 workspace/folder 的 in-flight start 复用同一 backend promise，复用调用只按需激活同一 thread；修复 Claude native 会话列表硬编码 50 的窗口问题，改为按项目会话显示数量和 catalog page cap 计算 effective limit，保留 UI root 裁剪、父子会话、folder、archive/hidden 过滤语义；新增 OpenSpec change harden-session-start-and-claude-list-window 并通过 focused Vitest、OpenSpec validate、typecheck。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4102b116` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
