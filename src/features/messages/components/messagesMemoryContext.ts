@@ -1,10 +1,13 @@
 import type { ConversationItem } from "../../../types";
 import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
+import { parseProjectMemoryRetrievalPackPrefix } from "../../project-memory/utils/projectMemoryRetrievalPack";
 import { isEquivalentUserObservation } from "../../threads/assembly/conversationNormalization";
 
 export type MemoryContextSummary = {
   preview: string;
   lines: string[];
+  source?: string;
+  records?: Array<{ index: string; memoryId: string; title: string }>;
 };
 
 const PROJECT_MEMORY_KIND_LINE_REGEX =
@@ -89,6 +92,42 @@ export function parseInjectedMemoryPrefixFromUser(
   const normalized = text.trimStart();
   if (!normalized) {
     return null;
+  }
+
+  const packSummaries: Array<NonNullable<
+    ReturnType<typeof parseProjectMemoryRetrievalPackPrefix>
+  >["packSummary"]> = [];
+  let remainingPackText = normalized;
+  let packMatch = parseProjectMemoryRetrievalPackPrefix(remainingPackText);
+  while (packMatch) {
+    packSummaries.push(packMatch.packSummary);
+    remainingPackText = packMatch.remainingText;
+    packMatch = parseProjectMemoryRetrievalPackPrefix(remainingPackText);
+  }
+  if (packSummaries.length > 0) {
+    const combinedLines = packSummaries.flatMap((summary) =>
+      packSummaries.length > 1 && summary.source
+        ? summary.lines.map((line) => `${summary.source}: ${line}`)
+        : summary.lines,
+    );
+    const preview = combinedLines.length > 0
+      ? combinedLines.slice(0, 3).join("；")
+      : packSummaries.map((summary) => summary.preview).filter(Boolean).join("；");
+    const memorySummary = buildMemorySummary(preview);
+    if (!memorySummary) {
+      return null;
+    }
+    return {
+      memorySummary: {
+        ...memorySummary,
+        source: packSummaries.map((summary) => summary.source).filter(Boolean).join(","),
+        records: packSummaries.flatMap((summary) => summary.records),
+        lines: combinedLines.length > 0
+          ? combinedLines
+          : memorySummary.lines,
+      },
+      remainingText: remainingPackText,
+    };
   }
 
   const xmlMatch = normalized.match(PROJECT_MEMORY_XML_PREFIX_REGEX);

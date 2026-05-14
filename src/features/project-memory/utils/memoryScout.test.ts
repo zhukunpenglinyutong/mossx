@@ -163,7 +163,9 @@ describe("memoryScout", () => {
 
     expect(block).toContain('source="memory-scout"');
     expect(block).toContain("memoryId=m-1");
-    expect(injected.finalText).toContain("</project-memory>\n\n继续排查");
+    expect(injected.finalText).toContain('<project-memory-pack source="memory-scout"');
+    expect(injected.finalText).toContain("Source Records:");
+    expect(injected.finalText).toContain("</project-memory-pack>\n\n继续排查");
     expect(injected.injectedCount).toBe(1);
   });
 });

@@ -75,6 +75,21 @@ describe("scoreMemoryRelevance", () => {
     );
     expect(score).toBe(0);
   });
+
+  it("scores canonical conversation fields beyond summary preview", () => {
+    const score = scoreMemoryRelevance(
+      {
+        title: "旧摘要",
+        summary: "UI preview",
+        tags: [],
+        userInput: "怎么配置 JWT",
+        assistantResponse: "Spring Security 使用 jjwt 处理 token",
+        detail: "fallback detail",
+      },
+      normalizeQueryTerms("Spring Security JWT token"),
+    );
+    expect(score).toBeGreaterThan(0.5);
+  });
 });
 
 describe("selectContextMemories", () => {
@@ -300,7 +315,7 @@ describe("injectSelectedMemoriesContext", () => {
     expect(result.finalText).toContain("请继续");
   });
 
-  it("supports summary mode for selected memory injection", () => {
+  it("keeps selected memory model-facing injection detailed even when preview uses summary mode", () => {
     const memory = makeScored("note", "仅摘要内容", {
       memory: { id: "manual-2", detail: "这段 detail 不应被注入" } as any,
     }).memory;
@@ -310,7 +325,7 @@ describe("injectSelectedMemoriesContext", () => {
       mode: "summary",
     });
     expect(result.finalText).toContain("仅摘要内容");
-    expect(result.finalText).not.toContain("这段 detail 不应被注入");
+    expect(result.finalText).toContain("这段 detail 不应被注入");
     expect(result.previewText).toContain("仅摘要内容");
   });
 

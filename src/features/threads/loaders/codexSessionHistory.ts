@@ -47,7 +47,7 @@ const SKIP_GENERIC_TOOL_CALL_NAMES = new Set([
   "request_user_input",
 ]);
 const PROJECT_MEMORY_CONTEXT_PREFIX_REGEX =
-  /^<project-memory\b[\s\S]*?<\/project-memory>\s*/i;
+  /^<project-memory(?:-pack)?\b[\s\S]*?<\/project-memory(?:-pack)?>\s*/i;
 
 function hasProjectMemoryContextPrefix(text: string) {
   return PROJECT_MEMORY_CONTEXT_PREFIX_REGEX.test(text.trimStart());

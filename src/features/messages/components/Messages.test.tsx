@@ -1054,6 +1054,74 @@ describe("Messages", () => {
     });
   });
 
+  it("renders retrieval pack references with stable memory indexes outside the user bubble", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "codex-user-memory-pack-1",
+        kind: "message",
+        role: "user",
+        text: [
+          '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+          "Cleaned Context:",
+          "- [M1] 项目使用 Spring Boot 2.7 + Java 11。",
+          "",
+          "Conflicts:",
+          "- none",
+          "",
+          "Irrelevant Records:",
+          "- none",
+          "",
+          "Source Records:",
+          "[M1] memoryId=m-pack-1 title=项目技术栈 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+          "Original user input:",
+          "项目技术栈是什么",
+          "Original assistant response:",
+          "项目使用 Spring Boot 2.7 + Java 11。",
+          "",
+          "Instruction:",
+          "Use relevant records as prior project context.",
+          "</project-memory-pack>",
+          "",
+          "继续分析项目",
+        ].join("\n"),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-memory-pack"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const bubble = container.querySelector(".message.user .bubble");
+    const memoryCard = container.querySelector(".memory-context-summary-card");
+    expect(memoryCard).toBeTruthy();
+    expect(bubble).toBeTruthy();
+    expect(bubble?.contains(memoryCard)).toBe(false);
+    expect(container.querySelector(".user-collapsible-text-content")?.textContent ?? "").toBe(
+      "继续分析项目",
+    );
+    expect(bubble?.textContent ?? "").not.toContain("project-memory-pack");
+
+    const toggle = container.querySelector(".memory-context-summary-toggle");
+    expect(toggle).toBeTruthy();
+    if (!toggle) {
+      return;
+    }
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      const content = container.querySelector(".memory-context-summary-content");
+      expect(content?.textContent ?? "").toContain("[M1]");
+      expect(content?.textContent ?? "").toContain("Spring Boot");
+    });
+  });
+
   it("dedupes assistant memory summary cards against attributed user memory wrapper in the same turn", () => {
     const items: ConversationItem[] = [
       {

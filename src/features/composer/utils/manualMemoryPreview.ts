@@ -1,4 +1,5 @@
 export type ManualMemoryPreviewInput = {
+  index?: string | null;
   label?: string | null;
   title?: string | null;
   summary?: string | null;
@@ -44,7 +45,7 @@ export function resolveManualMemoryPreview(
     input.label,
   );
   return {
-    title: title || "Untitled memory",
+    title: input.index ? `${input.index} ${title || "Untitled memory"}` : title || "Untitled memory",
     summary: summary || "No summary available.",
   };
 }

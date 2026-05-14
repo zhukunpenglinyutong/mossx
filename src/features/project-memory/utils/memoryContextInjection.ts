@@ -1,6 +1,11 @@
 import type { ProjectMemoryItem } from "../../../services/tauri";
 import type { MemoryContextInjectionMode } from "../../../types";
 import { resolveProjectMemoryInjectionText } from "./projectMemoryDisplay";
+import {
+  buildProjectMemoryRetrievalPack,
+  buildProjectMemorySourceRecords,
+  formatProjectMemoryRetrievalPack,
+} from "./projectMemoryRetrievalPack";
 
 export const MAX_ITEM_CHARS = 200;
 export const MAX_TOTAL_CHARS = 1000;
@@ -92,14 +97,35 @@ export function normalizeQueryTerms(text: string): string[] {
 }
 
 export function scoreMemoryRelevance(
-  memory: Pick<ProjectMemoryItem, "title" | "summary" | "tags">,
+  memory: Pick<ProjectMemoryItem, "title" | "summary" | "tags"> &
+    Partial<Pick<
+      ProjectMemoryItem,
+      | "userInput"
+      | "assistantResponse"
+      | "assistantThinkingSummary"
+      | "detail"
+      | "cleanText"
+    >>,
   queryTerms: string[],
 ): number {
   if (queryTerms.length === 0) {
     return 0;
   }
   const memoryTerms = new Set(
-    normalizeQueryTerms(`${memory.title} ${memory.summary} ${(memory.tags ?? []).join(" ")}`),
+    normalizeQueryTerms(
+      [
+        memory.title,
+        memory.summary,
+        (memory.tags ?? []).join(" "),
+        memory.userInput,
+        memory.assistantThinkingSummary,
+        memory.assistantResponse,
+        memory.detail,
+        memory.cleanText,
+      ]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join(" "),
+    ),
   );
   if (memoryTerms.size === 0) {
     return 0;
@@ -348,13 +374,12 @@ export function injectSelectedMemoriesContext(params: {
     };
   }
 
-  const selected = params.memories.map((memory) => ({
-    memory,
-    relevanceScore: 1,
-  }));
-  const mode = params.mode ?? "detail";
-  const { lines, truncated } = clampContextBudget(selected, { mode });
-  const block = formatMemoryContextBlock(lines, truncated, "manual-selection");
+  const records = buildProjectMemorySourceRecords({ memories: params.memories });
+  const pack = buildProjectMemoryRetrievalPack({
+    source: "manual-selection",
+    records,
+  });
+  const block = formatProjectMemoryRetrievalPack(pack);
   if (!block) {
     return {
       finalText: params.userText,
@@ -365,11 +390,15 @@ export function injectSelectedMemoriesContext(params: {
       disabledReason: "manual_empty",
     };
   }
+  const selected = params.memories.map((memory) => ({
+    memory,
+    relevanceScore: 1,
+  }));
   const { lines: previewLines } = clampContextBudget(selected, { mode: "summary" });
 
   return {
     finalText: `${block}\n\n${params.userText}`,
-    injectedCount: lines.length,
+    injectedCount: pack.records.length,
     injectedChars: block.length,
     retrievalMs: params.retrievalMs ?? 0,
     previewText: buildPreviewText(previewLines),

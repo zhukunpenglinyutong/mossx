@@ -89,13 +89,13 @@ describe("history loaders", () => {
 
   it("preserves codex remote project memory context for history resource rendering", async () => {
     const memoryWrappedPrompt = [
-      '<project-memory source="memory-scout" count="1" status="ok" truncated="false">',
-      "Memory Brief:",
-      "1. [conversation_turn] 项目分析 (memoryId=m-1)",
-      "   reason: Matched query terms: 项目",
-      "   summary: 之前已经快速分析过这个 Spring Boot 项目。",
-      "   source: threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
-      "</project-memory>",
+      '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+      "Cleaned Context:",
+      "- [M1] 之前已经快速分析过这个 Spring Boot 项目。",
+      "",
+      "Source Records:",
+      "[M1] memoryId=m-1 title=项目分析 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+      "</project-memory-pack>",
       "",
       "项目分析",
     ].join("\n");
@@ -192,11 +192,13 @@ describe("history loaders", () => {
 
   it("preserves codex local project memory context for history resource rendering", () => {
     const memoryWrappedPrompt = [
-      '<project-memory source="memory-scout" count="1" status="ok" truncated="false">',
-      "Memory Brief:",
-      "1. [conversation_turn] 项目分析 (memoryId=m-1)",
-      "   source: threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
-      "</project-memory>",
+      '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+      "Cleaned Context:",
+      "- [M1] 之前已经快速分析过这个 Spring Boot 项目。",
+      "",
+      "Source Records:",
+      "[M1] memoryId=m-1 title=项目分析 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+      "</project-memory-pack>",
       "",
       "项目分析",
     ].join("\n");

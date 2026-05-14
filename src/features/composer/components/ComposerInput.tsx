@@ -1409,8 +1409,10 @@ export function ComposerInput({
                   {suggestions.map((item, index) => {
                     const memoryId = item.memoryId ?? item.id;
                     const selected = selectedManualMemoryIdSet.has(memoryId);
+                    const selectedMemoryIndex = selectedManualMemoryIds.indexOf(memoryId);
                     const isActive = index === highlightIndex;
                     const preview = resolveManualMemoryPreview({
+                      index: selectedMemoryIndex >= 0 ? `[M${selectedMemoryIndex + 1}]` : null,
                       label: item.label,
                       title: item.memoryTitle,
                       summary: item.memorySummary,

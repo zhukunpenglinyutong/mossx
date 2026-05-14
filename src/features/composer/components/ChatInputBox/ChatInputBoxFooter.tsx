@@ -781,8 +781,10 @@ export function ChatInputBoxFooter({
               {memoryEntries.map(({ item, index, memory }) => {
                 const memoryId = memory?.id ?? item.id;
                 const selected = selectedManualMemoryIdSet.has(memoryId);
+                const selectedMemoryIndex = selectedManualMemoryIds.indexOf(memoryId);
                 const isActive = index === memoryCompletion.activeIndex;
                 const preview = resolveManualMemoryPreview({
+                  index: selectedMemoryIndex >= 0 ? `[M${selectedMemoryIndex + 1}]` : null,
                   label: item.label,
                   title: memory?.title,
                   summary: memory?.summary,

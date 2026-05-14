@@ -15,7 +15,8 @@ export type NormalizedConversationText = {
 };
 
 const USER_INPUT_BLOCK_MARKER_REGEX = /\[User Input\]\s*/gi;
-const PROJECT_MEMORY_BLOCK_REGEX = /^<project-memory\b[\s\S]*?<\/project-memory>\s*/i;
+const PROJECT_MEMORY_BLOCK_REGEX =
+  /^<project-memory(?:-pack)?\b[\s\S]*?<\/project-memory(?:-pack)?>\s*/i;
 const MODE_FALLBACK_PREFIX_REGEX =
   /^(?:collaboration mode:\s*code\.|execution policy \(default mode\):|execution policy \(plan mode\):)/i;
 const MODE_FALLBACK_MARKER_REGEX = /User request\s*:\s*/i;
@@ -35,11 +36,15 @@ const ASSISTANT_HIDDEN_CONTROL_LINE_REGEX =
   /^\s*(?:No response requested\.|request_user_input_result\b.*|queue bookkeeping\b.*)\s*$/gim;
 
 function stripInjectedProjectMemoryBlock(text: string): string {
-  const match = PROJECT_MEMORY_BLOCK_REGEX.exec(text.trimStart());
+  let stripped = text.trimStart();
+  let match = PROJECT_MEMORY_BLOCK_REGEX.exec(stripped);
   if (!match || match.index !== 0) {
     return text;
   }
-  const stripped = text.replace(PROJECT_MEMORY_BLOCK_REGEX, "");
+  while (match && match.index === 0) {
+    stripped = stripped.replace(PROJECT_MEMORY_BLOCK_REGEX, "").trimStart();
+    match = PROJECT_MEMORY_BLOCK_REGEX.exec(stripped);
+  }
   return stripped.trim().length > 0 ? stripped : text;
 }
 

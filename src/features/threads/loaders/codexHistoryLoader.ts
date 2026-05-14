@@ -86,7 +86,7 @@ type RemoteTurnTarget = {
 };
 
 const PROJECT_MEMORY_CONTEXT_PREFIX_REGEX =
-  /^<project-memory\b[\s\S]*?<\/project-memory>\s*/i;
+  /^<project-memory(?:-pack)?\b[\s\S]*?<\/project-memory(?:-pack)?>\s*/i;
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";

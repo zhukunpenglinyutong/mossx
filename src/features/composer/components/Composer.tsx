@@ -1921,8 +1921,8 @@ export const Composer = memo(function Composer({
                       </span>
                     </div>
                     <div className="composer-memory-chip-list">
-                      {selectedManualMemories.map((memory) => {
-                        const chipTitle = resolveManualMemoryChipTitle(memory);
+                      {selectedManualMemories.map((memory, memoryIndex) => {
+                        const chipTitle = `[M${memoryIndex + 1}] ${resolveManualMemoryChipTitle(memory)}`;
                         const chipDetail = resolveManualMemoryChipDetail(memory);
                         return (
                           <article

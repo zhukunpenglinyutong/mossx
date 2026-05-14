@@ -183,6 +183,7 @@ function withMemoryScoutTimeout(action: Promise<MemoryBrief>, timeoutMs = MEMORY
         resolve({
           status: "timeout",
           query: "",
+          memories: [],
           items: [],
           conflicts: [],
           truncated: false,
@@ -547,6 +548,7 @@ export function useThreadMessaging({
         memoryScoutInjectionResult = injectMemoryScoutBriefContext({
           userText: finalText,
           brief: memoryBrief,
+          startIndex: injectionResult.injectedCount + 1,
         });
         finalText = memoryScoutInjectionResult.finalText;
       }

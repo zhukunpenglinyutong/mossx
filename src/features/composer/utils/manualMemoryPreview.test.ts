@@ -34,4 +34,14 @@ describe("resolveManualMemoryPreview", () => {
       summary: "Build first, then smoke test.",
     });
   });
+
+  it("prefixes stable memory index when provided", () => {
+    expect(
+      resolveManualMemoryPreview({
+        index: "[M2]",
+        title: "项目技术栈",
+        summary: "Spring Boot",
+      }).title,
+    ).toBe("[M2] 项目技术栈");
+  });
 });

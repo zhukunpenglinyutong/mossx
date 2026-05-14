@@ -12,6 +12,12 @@ import {
   resolveProjectMemoryCompactSummary,
   resolveProjectMemoryCompactTitle,
 } from "./projectMemoryDisplay";
+import { cleanProjectMemoryRecordsForRequest } from "./projectMemoryCleaner";
+import {
+  buildProjectMemoryRetrievalPack,
+  buildProjectMemorySourceRecords,
+  formatProjectMemoryRetrievalPack,
+} from "./projectMemoryRetrievalPack";
 
 export type MemoryBriefStatus = "ok" | "empty" | "timeout" | "error";
 
@@ -34,6 +40,7 @@ export type MemoryBriefItem = {
 export type MemoryBrief = {
   status: MemoryBriefStatus;
   query: string;
+  memories?: ProjectMemoryItem[];
   items: MemoryBriefItem[];
   conflicts: string[];
   truncated: boolean;
@@ -171,6 +178,7 @@ export function buildMemoryBrief(params: {
     return {
       status: "empty",
       query: params.query,
+      memories: [],
       items: [],
       conflicts: [],
       truncated: false,
@@ -189,6 +197,7 @@ export function buildMemoryBrief(params: {
     return {
       status: "empty",
       query: params.query,
+      memories: [],
       items: [],
       conflicts: [],
       truncated: false,
@@ -200,6 +209,7 @@ export function buildMemoryBrief(params: {
   return {
     status: "ok",
     query: params.query,
+    memories: selectedWithinBudget.map((entry) => entry.memory),
     items,
     conflicts: detectConflicts(items),
     truncated: selected.length > selectedWithinBudget.length || candidates.length > items.length,
@@ -232,6 +242,7 @@ export async function scoutProjectMemory(params: {
     return {
       status: "error",
       query: params.query,
+      memories: [],
       items: [],
       conflicts: [],
       truncated: false,
@@ -306,8 +317,25 @@ function resolveScoutDisabledReason(
 export function injectMemoryScoutBriefContext(params: {
   userText: string;
   brief: MemoryBrief;
+  startIndex?: number;
 }): InjectionResult {
-  const block = buildMemoryScoutContextBlock(params.brief);
+  const records = buildProjectMemorySourceRecords({
+    memories: params.brief.memories ?? [],
+    startIndex: params.startIndex,
+  });
+  const cleaner =
+    params.brief.status === "ok"
+      ? cleanProjectMemoryRecordsForRequest({
+          userText: params.brief.query,
+          records,
+        })
+      : null;
+  const pack = buildProjectMemoryRetrievalPack({
+    source: "memory-scout",
+    records,
+    cleaner,
+  });
+  const block = formatProjectMemoryRetrievalPack(pack) ?? buildMemoryScoutContextBlock(params.brief);
   if (!block) {
     return {
       finalText: params.userText,
