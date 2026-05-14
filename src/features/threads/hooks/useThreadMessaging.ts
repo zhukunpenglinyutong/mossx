@@ -209,6 +209,7 @@ function withMemoryScoutTimeout(action: Promise<MemoryBrief>, timeoutMs = MEMORY
           conflicts: [],
           truncated: false,
           elapsedMs: Date.now() - startedAt,
+          retrievalMode: "lexical",
         });
       }, timeoutMs);
     }),
@@ -544,6 +545,7 @@ export function useThreadMessaging({
         previewText: null,
         disabledReason: null,
       };
+      let memoryScoutBrief: MemoryBrief | null = null;
       const memoryScoutSummaryItemId = `memory-scout-context-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 8)}`;
@@ -567,6 +569,7 @@ export function useThreadMessaging({
             listFn: projectMemoryFacade.listSummary,
           }),
         );
+        memoryScoutBrief = memoryBrief;
         memoryScoutInjectionResult = injectMemoryScoutBriefContext({
           userText: finalText,
           brief: memoryBrief,
@@ -727,6 +730,8 @@ export function useThreadMessaging({
             injectedChars: memoryScoutInjectionResult.injectedChars,
             retrievalMs: memoryScoutInjectionResult.retrievalMs,
             reason: memoryScoutInjectionResult.disabledReason,
+            retrievalMode: memoryScoutBrief?.retrievalMode ?? "lexical",
+            semanticDiagnostics: memoryScoutBrief?.semanticDiagnostics ?? null,
           },
         });
       }

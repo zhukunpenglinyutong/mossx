@@ -6,6 +6,7 @@ import {
   injectMemoryScoutBriefContext,
   scoutProjectMemory,
 } from "./memoryScout";
+import type { ProjectMemoryEmbeddingProvider } from "./projectMemorySemanticRetrieval";
 
 function makeMemory(overrides: Partial<ProjectMemoryItem> = {}): ProjectMemoryItem {
   return {
@@ -27,6 +28,23 @@ function makeMemory(overrides: Partial<ProjectMemoryItem> = {}): ProjectMemoryIt
     createdAt: 1,
     updatedAt: 2,
     ...overrides,
+  };
+}
+
+function makeSemanticProvider(): ProjectMemoryEmbeddingProvider {
+  return {
+    providerId: "fake-local",
+    modelId: "fake-semantic-v1",
+    dimensions: 2,
+    embeddingVersion: "test-v1",
+    scope: "test",
+    health: () => ({ status: "available" }),
+    embed: (text: string) => {
+      const normalized = text.toLowerCase();
+      return normalized.includes("springboot-demo") || normalized.includes("之前分析过")
+        ? [1, 0]
+        : [0, 1];
+    },
   };
 }
 
@@ -139,6 +157,73 @@ describe("memoryScout", () => {
     );
   });
 
+  it("uses semantic retrieval over broad local candidates when provider is available", async () => {
+    const listFn = vi.fn().mockResolvedValue({
+      items: [
+        makeMemory({
+          id: "semantic-hit",
+          title: "项目历史分析",
+          summary: "主要风险是部署配置",
+          cleanText: "springboot-demo 使用 H2 database",
+          tags: ["springboot-demo"],
+        }),
+      ],
+      total: 1,
+    });
+
+    const brief = await scoutProjectMemory({
+      workspaceId: "ws-1",
+      query: "之前分析过 springboot-demo 吗",
+      listFn,
+      semanticProvider: makeSemanticProvider(),
+      allowTestSemanticProvider: true,
+    });
+
+    expect(brief.status).toBe("ok");
+    expect(brief.retrievalMode).toBe("hybrid");
+    expect(brief.semanticDiagnostics).toMatchObject({
+      status: "available",
+      providerId: "fake-local",
+      candidateCount: 1,
+    });
+    expect(brief.items[0]?.memoryId).toBe("semantic-hit");
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        query: null,
+        pageSize: 10000,
+      }),
+    );
+  });
+
+  it("falls back to lexical retrieval when semantic provider is unavailable", async () => {
+    const listFn = vi.fn().mockResolvedValue({
+      items: [makeMemory()],
+      total: 1,
+    });
+    const unavailableProvider: ProjectMemoryEmbeddingProvider = {
+      ...makeSemanticProvider(),
+      health: () => ({ status: "unavailable", reason: "no_local_provider" }),
+    };
+
+    const brief = await scoutProjectMemory({
+      workspaceId: "ws-1",
+      query: "数据库 timeout",
+      listFn,
+      semanticProvider: unavailableProvider,
+      allowTestSemanticProvider: true,
+    });
+
+    expect(brief.status).toBe("ok");
+    expect(brief.retrievalMode).toBe("lexical");
+    expect(brief.semanticDiagnostics).toBeUndefined();
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "数据库 timeout",
+      }),
+    );
+  });
+
   it("converts list errors into an error brief", async () => {
     const brief = await scoutProjectMemory({
       workspaceId: "ws-1",
@@ -166,6 +251,8 @@ describe("memoryScout", () => {
     expect(injected.finalText).toContain('<project-memory-pack source="memory-scout"');
     expect(injected.finalText).toContain("Source Records:");
     expect(injected.finalText).toContain("</project-memory-pack>\n\n继续排查");
+    expect(injected.finalText).not.toContain("vectorScore");
+    expect(injected.finalText).not.toContain("embedding");
     expect(injected.injectedCount).toBe(1);
   });
 });

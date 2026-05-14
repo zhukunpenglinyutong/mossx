@@ -151,6 +151,8 @@ const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
   ".dart_tool",
 ]);
 const CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS = 120;
+const EMPTY_DIRECTORY_METADATA: WorkspaceDirectoryEntry[] = [];
+
 function setFileTreeDragBridge(paths: string[]) {
   if (typeof window === "undefined") {
     return;
@@ -739,7 +741,7 @@ export function FileTreePanel({
   gitRoot = null,
   files,
   directories,
-  directoryMetadata = [],
+  directoryMetadata = EMPTY_DIRECTORY_METADATA,
   isLoading,
   loadError = null,
   filePanelMode: _filePanelMode,
@@ -1067,6 +1069,9 @@ export function FileTreePanel({
           next.add(path);
         }
       });
+      if (next.size === prev.size && [...next].every((path) => prev.has(path))) {
+        return prev;
+      }
       return next;
     });
   }, [folderPaths]);

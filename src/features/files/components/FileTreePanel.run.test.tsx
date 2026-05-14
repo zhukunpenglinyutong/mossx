@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { OpenAppTarget } from "../../../types";
 
 const revealItemInDirMock = vi.fn(async () => undefined);
+const emitToMock = vi.fn(async () => undefined);
 
 const invokeMock = vi.fn(async (...args: any[]) => {
   const command = args[0];
@@ -37,7 +38,26 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (value: string) => value,
-  invoke: (...args: any[]) => invokeMock(...args),
+  invoke: (...args: any[]) => (invokeMock as (...args: any[]) => Promise<any>)(...args),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  emitTo: (...args: any[]) => (emitToMock as (...args: any[]) => Promise<void>)(...args),
+}));
+
+vi.mock("../../../services/tauri", () => ({
+  getWorkspaceDirectoryChildren: (workspaceId: string, path: string) =>
+    invokeMock("list_workspace_directory_children", { workspaceId, path }),
+  readWorkspaceFile: (workspaceId: string, path: string) =>
+    invokeMock("read_workspace_file", { workspaceId, path }),
+  createWorkspaceDirectory: (workspaceId: string, path: string) =>
+    invokeMock("create_workspace_directory", { workspaceId, path }),
+  copyWorkspaceItem: (workspaceId: string, path: string) =>
+    invokeMock("copy_workspace_item", { workspaceId, path }),
+  trashWorkspaceItem: (workspaceId: string, path: string) =>
+    invokeMock("trash_workspace_item", { workspaceId, path }),
+  writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>
+    invokeMock("write_workspace_file", { workspaceId, path, content }),
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -46,6 +66,14 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   confirm: vi.fn(async () => true),
+}));
+
+vi.mock("../../../components/FileIcon", () => ({
+  default: () => <span data-testid="file-icon" />,
+}));
+
+vi.mock("./FilePreviewPopover", () => ({
+  FilePreviewPopover: () => <div data-testid="file-preview-popover" />,
 }));
 
 let FileTreePanel: typeof import("./FileTreePanel").FileTreePanel;
@@ -57,6 +85,7 @@ beforeAll(async () => {
 afterEach(() => {
   cleanup();
   invokeMock.mockClear();
+  emitToMock.mockClear();
   revealItemInDirMock.mockClear();
   delete window.handleFilePathFromJava;
   delete window.__fileTreeDragPaths;

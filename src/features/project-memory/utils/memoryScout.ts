@@ -9,6 +9,15 @@ import {
   type ScoredMemory,
 } from "./memoryContextInjection";
 import {
+  PROJECT_MEMORY_SEMANTIC_SCAN_PAGE_SIZE,
+  retrieveProjectMemorySemanticCandidates,
+  semanticCandidatesToScoredMemories,
+  type ProjectMemoryEmbeddingProvider,
+  type ProjectMemoryRetrievalMode,
+  type ProjectMemorySemanticDiagnostics,
+  type ProjectMemorySemanticRetrievalResult,
+} from "./projectMemorySemanticRetrieval";
+import {
   resolveProjectMemoryCompactSummary,
   resolveProjectMemoryCompactTitle,
 } from "./projectMemoryDisplay";
@@ -45,6 +54,8 @@ export type MemoryBrief = {
   conflicts: string[];
   truncated: boolean;
   elapsedMs: number;
+  retrievalMode: ProjectMemoryRetrievalMode;
+  semanticDiagnostics?: ProjectMemorySemanticDiagnostics;
 };
 
 export type MemoryScoutListFn = (params: {
@@ -168,11 +179,18 @@ export function buildMemoryBrief(params: {
   memories: ProjectMemoryItem[];
   elapsedMs?: number;
   includeObsolete?: boolean;
+  semanticResult?: ProjectMemorySemanticRetrievalResult | null;
 }): MemoryBrief {
   const queryTerms = normalizeQueryTerms(params.query);
   const candidates = params.includeObsolete
     ? params.memories
     : params.memories.filter((memory) => !isObsoleteMemory(memory));
+  const semanticDiagnostics = params.semanticResult?.diagnostics;
+  const semanticScored =
+    params.semanticResult && params.semanticResult.candidates.length > 0
+      ? semanticCandidatesToScoredMemories(params.semanticResult.candidates)
+      : null;
+  const retrievalMode: ProjectMemoryRetrievalMode = semanticScored ? "hybrid" : "lexical";
 
   if (candidates.length === 0) {
     return {
@@ -183,6 +201,8 @@ export function buildMemoryBrief(params: {
       conflicts: [],
       truncated: false,
       elapsedMs: params.elapsedMs ?? 0,
+      retrievalMode,
+      semanticDiagnostics,
     };
   }
 
@@ -191,7 +211,8 @@ export function buildMemoryBrief(params: {
     relevanceScore: scoreMemoryRelevance(memory, queryTerms),
   }));
   const selected =
-    queryTerms.length > 0 ? selectContextMemories(scored) : selectRecentMemories(scored);
+    semanticScored ??
+    (queryTerms.length > 0 ? selectContextMemories(scored) : selectRecentMemories(scored));
   const selectedWithinBudget = selected.slice(0, MEMORY_SCOUT_MAX_ITEMS);
   if (selectedWithinBudget.length === 0) {
     return {
@@ -202,6 +223,8 @@ export function buildMemoryBrief(params: {
       conflicts: [],
       truncated: false,
       elapsedMs: params.elapsedMs ?? 0,
+      retrievalMode,
+      semanticDiagnostics,
     };
   }
 
@@ -214,6 +237,8 @@ export function buildMemoryBrief(params: {
     conflicts: detectConflicts(items),
     truncated: selected.length > selectedWithinBudget.length || candidates.length > items.length,
     elapsedMs: params.elapsedMs ?? 0,
+    retrievalMode,
+    semanticDiagnostics,
   };
 }
 
@@ -222,9 +247,38 @@ export async function scoutProjectMemory(params: {
   query: string;
   listFn: MemoryScoutListFn;
   includeObsolete?: boolean;
+  semanticProvider?: ProjectMemoryEmbeddingProvider | null;
+  allowTestSemanticProvider?: boolean;
 }): Promise<MemoryBrief> {
   const startedAt = Date.now();
   try {
+    if (params.semanticProvider) {
+      const result = await params.listFn({
+        workspaceId: params.workspaceId,
+        query: null,
+        importance: null,
+        page: 0,
+        pageSize: PROJECT_MEMORY_SEMANTIC_SCAN_PAGE_SIZE,
+      });
+      const semanticResult = await retrieveProjectMemorySemanticCandidates({
+        workspaceId: params.workspaceId,
+        query: params.query,
+        memories: result.items ?? [],
+        provider: params.semanticProvider,
+        allowTestProvider: params.allowTestSemanticProvider,
+        topK: MEMORY_SCOUT_MAX_ITEMS,
+      });
+      if (semanticResult.status === "available" || semanticResult.status === "indexing") {
+        return buildMemoryBrief({
+          query: params.query,
+          memories: result.items ?? [],
+          includeObsolete: params.includeObsolete,
+          semanticResult,
+          elapsedMs: Date.now() - startedAt,
+        });
+      }
+    }
+
     const result = await params.listFn({
       workspaceId: params.workspaceId,
       query: params.query,
@@ -247,6 +301,7 @@ export async function scoutProjectMemory(params: {
       conflicts: [],
       truncated: false,
       elapsedMs: Date.now() - startedAt,
+      retrievalMode: "lexical",
     };
   }
 }

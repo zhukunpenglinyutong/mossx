@@ -20,6 +20,7 @@
 
 - boundary 数据先 normalize 再使用。
 - side effect 必须 cleanup。
+- `useEffect` 中清理/归一化 `Set`、`Map`、array state 时，内容未变化必须返回原 state 引用；禁止每轮返回等价的新 collection，避免 render loop。
 - 错误信息要可追踪、可读、可反馈。
 - 关键行为变更必须补 tests 或 contract check。
 - 图标按钮 tooltip 激活后必须能关闭，禁止留下悬浮残影。
