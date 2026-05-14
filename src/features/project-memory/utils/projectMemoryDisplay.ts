@@ -1,10 +1,25 @@
 import type { ProjectMemoryItem } from "../../../services/tauri";
 import type { MemoryContextInjectionMode } from "../../../types";
+import {
+  resolveProjectMemoryReviewState,
+  type ProjectMemoryHealthState,
+  type ProjectMemoryReviewState,
+} from "./projectMemoryHealth";
 
 export type ProjectMemoryDisplayRecordKind =
   | "conversation_turn"
   | "manual_note"
   | "legacy";
+
+export { deriveProjectMemoryHealthState } from "./projectMemoryHealth";
+export type { ProjectMemoryHealthState, ProjectMemoryReviewState };
+
+export type ProjectMemorySourceLocator = {
+  available: boolean;
+  threadId: string | null;
+  turnId: string | null;
+  engine: string | null;
+};
 
 export type ConversationTurnLabels = {
   userInput: string;
@@ -48,6 +63,73 @@ export function isConversationTurnMemory(
   >,
 ) {
   return getProjectMemoryDisplayRecordKind(memory) === "conversation_turn";
+}
+
+function compactWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  return values.map((value) => compactWhitespace(value ?? "")).find(Boolean) ?? "";
+}
+
+export function resolveProjectMemoryCompactTitle(
+  memory: Partial<Pick<ProjectMemoryItem, "title" | "summary" | "kind">>,
+) {
+  return firstNonEmpty(memory.title, memory.summary, memory.kind) || "Untitled memory";
+}
+
+export function resolveProjectMemoryCompactSummary(
+  memory: Partial<Pick<
+    ProjectMemoryItem,
+    | "summary"
+    | "cleanText"
+    | "detail"
+    | "userInput"
+    | "assistantThinkingSummary"
+    | "title"
+  >>,
+) {
+  return (
+    firstNonEmpty(
+      memory.summary,
+      memory.userInput,
+      memory.assistantThinkingSummary,
+      memory.cleanText,
+      memory.detail,
+      memory.title,
+    ) || "No summary available."
+  );
+}
+
+export function deriveProjectMemoryReviewState(
+  memory: Partial<
+    Pick<
+      ProjectMemoryItem,
+      | "reviewState"
+      | "recordKind"
+      | "source"
+      | "turnId"
+      | "userInput"
+      | "assistantResponse"
+    >
+  >,
+): ProjectMemoryReviewState {
+  return resolveProjectMemoryReviewState(memory);
+}
+
+export function resolveProjectMemorySourceLocator(
+  memory: Partial<Pick<ProjectMemoryItem, "threadId" | "turnId" | "engine">>,
+): ProjectMemorySourceLocator {
+  const threadId = memory.threadId?.trim() || null;
+  const turnId = memory.turnId?.trim() || null;
+  const engine = memory.engine?.trim() || null;
+  return {
+    available: Boolean(threadId && turnId),
+    threadId,
+    turnId,
+    engine,
+  };
 }
 
 export function buildConversationTurnMarkdown(

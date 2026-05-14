@@ -14,6 +14,14 @@ pub(super) fn normalized_optional_text(value: Option<String>) -> Option<String> 
     })
 }
 
+pub(super) fn normalized_review_state(value: Option<String>) -> Option<String> {
+    let normalized = value?.trim().to_string();
+    match normalized.as_str() {
+        "unreviewed" | "kept" | "converted" | "obsolete" | "dismissed" => Some(normalized),
+        _ => None,
+    }
+}
+
 pub(super) fn build_conversation_turn_detail(
     user_input: Option<&str>,
     assistant_response: Option<&str>,

@@ -142,12 +142,14 @@ Project Memory 面板拆成两类体验：
 
 - 自动 turn 记忆：结构化回看，显示用户输入、AI 回复、可选 thinking summary。
 - 手动 note 记忆：保留轻量创建/编辑能力，但不污染 turn 记忆模型。
+- Composer 输入区提供单次“记忆引用”入口：入口位于发送按钮旁，默认关闭；开启前必须通过紧凑确认弹窗二次确认；弹窗只说明本次发送会只读检索 Project Memory、生成 Memory Brief，并在发送或上下文清空后自动关闭。
 
 首期 UI 重点：
 
 - 列表可以看到这条记忆来自哪一轮对话。
 - 详情必须能完整回看 `userInput` 和 `assistantResponse`。
 - 复制整轮内容必须复制完整用户输入与完整 AI 回复。
+- Composer 记忆引用入口不得常驻长文提示，避免占用输入区工具栏空间。
 
 ### 5. Storage
 

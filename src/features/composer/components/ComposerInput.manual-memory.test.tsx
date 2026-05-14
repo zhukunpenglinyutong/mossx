@@ -144,16 +144,16 @@ describe("ComposerInput manual memory picker", () => {
     expect(onSelectSuggestion).toHaveBeenCalledWith(suggestions[1]);
   });
 
-  it("shows user input as list title and hides list summary for merged memories", () => {
+  it("shows user input title and compact summary without leaking full assistant output", () => {
     const suggestions = [
       makeMemorySuggestion({
         id: "memory:mem-merge",
         label: "你好！",
         memoryId: "mem-merge",
         memoryTitle: "你好！",
-        memorySummary: "这段摘要不应出现在左侧列表",
+        memorySummary: "fallback 摘要",
         memoryDetail:
-          "用户输入：skills/wf-thinking 分析一下\n助手输出摘要：这段摘要不应出现在左侧列表\n助手输出：完整回答",
+          "用户输入：skills/wf-thinking 分析一下\n助手输出摘要：这段摘要应该作为 compact preview\n助手输出：FULL_ASSISTANT_OUTPUT_SHOULD_NOT_APPEAR_IN_LEFT_LIST",
       }),
     ];
 
@@ -166,8 +166,9 @@ describe("ComposerInput manual memory picker", () => {
       name: /skills\/wf-thinking 分析一下/,
     });
     expect(within(option).getByText("skills/wf-thinking 分析一下")).toBeTruthy();
-    expect(option.querySelector(".composer-memory-picker-card-summary")).toBeNull();
-    expect(within(option).queryByText("这段摘要不应出现在左侧列表")).toBeNull();
+    expect(within(option).getByText("这段摘要应该作为 compact preview")).toBeTruthy();
+    expect(within(option).queryByText("FULL_ASSISTANT_OUTPUT_SHOULD_NOT_APPEAR_IN_LEFT_LIST")).toBeNull();
+    expect(view.container.textContent).toContain("FULL_ASSISTANT_OUTPUT_SHOULD_NOT_APPEAR_IN_LEFT_LIST");
   });
 
   it("renders structured preview sections for merged memory detail", () => {

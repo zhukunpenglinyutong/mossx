@@ -87,6 +87,56 @@ describe("history loaders", () => {
     ]);
   });
 
+  it("preserves codex remote project memory context for history resource rendering", async () => {
+    const memoryWrappedPrompt = [
+      '<project-memory source="memory-scout" count="1" status="ok" truncated="false">',
+      "Memory Brief:",
+      "1. [conversation_turn] 项目分析 (memoryId=m-1)",
+      "   reason: Matched query terms: 项目",
+      "   summary: 之前已经快速分析过这个 Spring Boot 项目。",
+      "   source: threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+      "</project-memory>",
+      "",
+      "项目分析",
+    ].join("\n");
+    const loader = createCodexHistoryLoader({
+      workspaceId: "ws-codex-memory-history",
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-memory",
+                items: [
+                  {
+                    id: "msg-memory-user",
+                    type: "userMessage",
+                    content: [{ type: "text", text: memoryWrappedPrompt }],
+                  },
+                  {
+                    id: "msg-memory-assistant",
+                    type: "agentMessage",
+                    text: "开始分析。",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    });
+
+    const snapshot = await loader.load("thread-codex-memory-history");
+
+    expect(snapshot.items[0]).toEqual(
+      expect.objectContaining({
+        kind: "message",
+        role: "user",
+        text: memoryWrappedPrompt,
+      }),
+    );
+  });
+
   it("loads passive Codex local history without resuming runtime when local items exist", async () => {
     const resumeThread = vi.fn().mockResolvedValue({
       result: {
@@ -136,6 +186,38 @@ describe("history loaders", () => {
         kind: "message",
         role: "assistant",
         text: "local history answer",
+      }),
+    ]);
+  });
+
+  it("preserves codex local project memory context for history resource rendering", () => {
+    const memoryWrappedPrompt = [
+      '<project-memory source="memory-scout" count="1" status="ok" truncated="false">',
+      "Memory Brief:",
+      "1. [conversation_turn] 项目分析 (memoryId=m-1)",
+      "   source: threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+      "</project-memory>",
+      "",
+      "项目分析",
+    ].join("\n");
+
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: memoryWrappedPrompt,
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: "message",
+        role: "user",
+        text: memoryWrappedPrompt,
       }),
     ]);
   });

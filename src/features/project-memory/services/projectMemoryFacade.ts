@@ -4,15 +4,19 @@ import {
   projectMemoryCompleteTurn,
   projectMemoryCreate,
   projectMemoryDelete,
+  projectMemoryDiagnostics,
   projectMemoryGet,
   projectMemoryGetDetail,
   projectMemoryGetSettings,
   projectMemoryList,
   projectMemoryListSummary,
+  projectMemoryReconcile,
   projectMemoryUpdate,
   projectMemoryUpdateSettings,
   type ProjectMemoryItem,
   type ProjectMemoryListResult,
+  type ProjectMemoryDiagnosticsResult,
+  type ProjectMemoryReconcileResult,
   type ProjectMemorySettings,
   type NormalizedConversationTurnPayload,
 } from "../../../services/tauri";
@@ -44,6 +48,7 @@ export type CreateProjectMemoryParams = {
   userInput?: string | null;
   assistantResponse?: string | null;
   assistantThinkingSummary?: string | null;
+  reviewState?: ProjectMemoryItem["reviewState"];
   source?: string | null;
   workspaceName?: string | null;
   workspacePath?: string | null;
@@ -66,6 +71,7 @@ export type UpdateProjectMemoryParams = {
   userInput?: string | null;
   assistantResponse?: string | null;
   assistantThinkingSummary?: string | null;
+  reviewState?: ProjectMemoryItem["reviewState"];
   source?: string | null;
   workspaceName?: string | null;
   workspacePath?: string | null;
@@ -116,6 +122,12 @@ export const projectMemoryFacade = {
   },
   delete(memoryId: string, workspaceId: string): Promise<void> {
     return projectMemoryDelete(memoryId, workspaceId);
+  },
+  diagnostics(workspaceId: string): Promise<ProjectMemoryDiagnosticsResult> {
+    return projectMemoryDiagnostics(workspaceId);
+  },
+  reconcile(workspaceId: string, dryRun: boolean): Promise<ProjectMemoryReconcileResult> {
+    return projectMemoryReconcile(workspaceId, dryRun);
   },
   captureAuto(input: {
     workspaceId: string;

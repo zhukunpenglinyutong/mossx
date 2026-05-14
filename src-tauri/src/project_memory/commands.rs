@@ -169,6 +169,9 @@ pub(crate) async fn project_memory_create(
                         item.assistant_thinking_summary =
                             normalized_optional_text(input.assistant_thinking_summary.clone());
                     }
+                    if let Some(review_state) = normalized_review_state(input.review_state.clone()) {
+                        item.review_state = Some(review_state);
+                    }
                     if let Some(source) = input.source.clone() {
                         item.source = source;
                     }
@@ -242,6 +245,7 @@ pub(crate) async fn project_memory_create(
             assistant_thinking_summary: normalized_optional_text(
                 input.assistant_thinking_summary.clone(),
             ),
+            review_state: normalized_review_state(input.review_state.clone()),
             source: input.source.clone().unwrap_or_else(|| "manual".to_string()),
             fingerprint,
             created_at: current_ms,
@@ -334,6 +338,9 @@ pub(crate) async fn project_memory_update(
                 item.assistant_thinking_summary =
                     normalized_optional_text(patch.assistant_thinking_summary.clone());
             }
+            if patch.review_state.is_some() {
+                item.review_state = normalized_review_state(patch.review_state.clone());
+            }
             if let Some(source) = patch.source.clone() {
                 item.source = source;
             }
@@ -376,6 +383,55 @@ pub(crate) async fn project_memory_delete(
         let _ = apply_delete_semantics(&mut items, &memory_id, current_ms);
         write_date_file(&file_path, &items)?;
         Ok(())
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn project_memory_diagnostics(
+    workspace_id: String,
+) -> Result<ProjectMemoryDiagnosticsResult, String> {
+    run_project_memory_io(move || {
+        ensure_migrated()?;
+        let ws_dir = match resolve_workspace_dir(&workspace_id)? {
+            Some(dir) => dir,
+            None => {
+                return Ok(ProjectMemoryDiagnosticsResult {
+                    workspace_id,
+                    total: 0,
+                    health_counts: ProjectMemoryHealthCounts::default(),
+                    duplicate_turn_groups: Vec::new(),
+                    bad_files: Vec::new(),
+                })
+            }
+        };
+        diagnose_workspace_memories(&workspace_id, &ws_dir)
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn project_memory_reconcile(
+    workspace_id: String,
+    dry_run: bool,
+) -> Result<ProjectMemoryReconcileResult, String> {
+    run_project_memory_io(move || {
+        ensure_migrated()?;
+        let ws_dir = match resolve_workspace_dir(&workspace_id)? {
+            Some(dir) => dir,
+            None => {
+                return Ok(ProjectMemoryReconcileResult {
+                    workspace_id,
+                    dry_run,
+                    fixable_count: 0,
+                    fixed_count: 0,
+                    skipped_count: 0,
+                    duplicate_groups: 0,
+                    changed_memory_ids: Vec::new(),
+                })
+            }
+        };
+        reconcile_workspace_memories(&workspace_id, &ws_dir, dry_run)
     })
     .await
 }
@@ -495,6 +551,7 @@ pub(crate) async fn project_memory_capture_auto(
             },
             assistant_response: None,
             assistant_thinking_summary: None,
+            review_state: None,
             source: input.source.clone().unwrap_or_else(|| {
                 if is_conversation_turn {
                     "conversation_turn".to_string()

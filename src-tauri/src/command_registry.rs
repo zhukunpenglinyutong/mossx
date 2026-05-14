@@ -250,6 +250,8 @@ pub(crate) fn invoke_handler(
         crate::project_memory::commands::project_memory_create,
         crate::project_memory::commands::project_memory_update,
         crate::project_memory::commands::project_memory_delete,
+        crate::project_memory::commands::project_memory_diagnostics,
+        crate::project_memory::commands::project_memory_reconcile,
         crate::project_memory::commands::project_memory_capture_auto,
         // Terminal
         crate::terminal::terminal_open,

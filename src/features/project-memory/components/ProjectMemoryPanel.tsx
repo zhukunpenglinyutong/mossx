@@ -11,15 +11,28 @@ import Square from "lucide-react/dist/esm/icons/square";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
+import Wrench from "lucide-react/dist/esm/icons/wrench";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import { Markdown } from "../../messages/components/Markdown";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { projectMemoryFacade } from "../services/projectMemoryFacade";
+import type {
+  ProjectMemoryDiagnosticsResult,
+  ProjectMemoryReconcileResult,
+} from "../../../services/tauri";
 import { isLikelyPollutedMemory } from "../utils/memoryMarkers";
 import {
+  deriveProjectMemoryHealthState,
+  deriveProjectMemoryReviewState,
   getProjectMemoryDisplayRecordKind,
   isConversationTurnMemory,
+  resolveProjectMemoryCompactSummary,
+  resolveProjectMemoryCompactTitle,
   resolveProjectMemoryDetailText,
+  resolveProjectMemorySourceLocator,
+  type ProjectMemoryHealthState,
+  type ProjectMemoryReviewState,
 } from "../utils/projectMemoryDisplay";
 import {
   getManualMemoryInjectionMode,
@@ -41,6 +54,8 @@ type MemoryDetailSection = {
 
 const DETAIL_SECTION_MARKER_REGEX =
   /(用户输入|AI 回复|AI 思考摘要|助手输出摘要|助手输出|User input|Assistant response|Assistant thinking summary|Assistant summary|Assistant output)[:：]/gi;
+
+const DEFAULT_VISIBLE_QUICK_TAG_COUNT = 8;
 
 function normalizeDetailSectionLabel(raw: string): string {
   const normalized = raw.trim().toLowerCase();
@@ -147,6 +162,38 @@ export function ProjectMemoryPanel({
         return value;
     }
   };
+  const healthStateLabel = (value: ProjectMemoryHealthState) => {
+    switch (value) {
+      case "complete":
+        return t("memory.health.complete");
+      case "input_only":
+        return t("memory.health.inputOnly");
+      case "assistant_only":
+        return t("memory.health.assistantOnly");
+      case "pending_fusion":
+        return t("memory.health.pendingFusion");
+      case "capture_failed":
+        return t("memory.health.captureFailed");
+      default:
+        return value;
+    }
+  };
+  const reviewStateLabel = (value: ProjectMemoryReviewState) => {
+    switch (value) {
+      case "unreviewed":
+        return t("memory.review.unreviewed");
+      case "kept":
+        return t("memory.review.kept");
+      case "converted":
+        return t("memory.review.converted");
+      case "obsolete":
+        return t("memory.review.obsolete");
+      case "dismissed":
+        return t("memory.review.dismissed");
+      default:
+        return value;
+    }
+  };
   const {
     items,
     loading,
@@ -191,10 +238,17 @@ export function ProjectMemoryPanel({
   const [detailTextDraft, setDetailTextDraft] = useState("");
   const [detailSaving, setDetailSaving] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [showAllQuickTags, setShowAllQuickTags] = useState(false);
   const [pollutionCandidateIds, setPollutionCandidateIds] = useState<string[]>([]);
   const [pollutionScannedTotal, setPollutionScannedTotal] = useState(0);
   const [pollutionBusy, setPollutionBusy] = useState<"scan" | "cleanup" | null>(null);
   const [pollutionMessage, setPollutionMessage] = useState<string | null>(null);
+  const [reviewFilter, setReviewFilter] = useState<ProjectMemoryReviewState | "all">("all");
+  const [healthFilter, setHealthFilter] = useState<ProjectMemoryHealthState | "all">("all");
+  const [diagnostics, setDiagnostics] = useState<ProjectMemoryDiagnosticsResult | null>(null);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"diagnostics" | "dry-run" | "apply" | null>(null);
+  const [reconcileResult, setReconcileResult] = useState<ProjectMemoryReconcileResult | null>(null);
+  const [showReconcileApplyConfirm, setShowReconcileApplyConfirm] = useState(false);
   const [manualInjectionMode, setManualInjectionModeState] = useState<
     "summary" | "detail"
   >(() => getManualMemoryInjectionMode());
@@ -250,6 +304,40 @@ export function ProjectMemoryPanel({
     });
     return Array.from(bag).sort((a, b) => a.localeCompare(b)).slice(0, 24);
   }, [items]);
+  const visibleQuickTags = useMemo(
+    () =>
+      showAllQuickTags
+        ? availableTags
+        : availableTags.slice(0, DEFAULT_VISIBLE_QUICK_TAG_COUNT),
+    [availableTags, showAllQuickTags],
+  );
+  const hiddenQuickTagCount = Math.max(0, availableTags.length - visibleQuickTags.length);
+  const reviewInboxCount = useMemo(
+    () =>
+      items.filter((item) => deriveProjectMemoryReviewState(item) === "unreviewed").length,
+    [items],
+  );
+  const healthIssueCount = useMemo(
+    () =>
+      items.filter((item) => deriveProjectMemoryHealthState(item) !== "complete").length,
+    [items],
+  );
+  const filteredItems = useMemo(
+    () =>
+      items.filter((item) => {
+        const reviewState = deriveProjectMemoryReviewState(item);
+        const healthState = deriveProjectMemoryHealthState(item);
+        return (
+          (reviewFilter === "all" || reviewState === reviewFilter) &&
+          (healthFilter === "all" || healthState === healthFilter)
+        );
+      }),
+    [healthFilter, items, reviewFilter],
+  );
+  const selectedSourceLocator = useMemo(
+    () => (selectedItem ? resolveProjectMemorySourceLocator(selectedItem) : null),
+    [selectedItem],
+  );
 
   useEffect(() => {
     if (!selectedItem) {
@@ -450,6 +538,137 @@ export function ProjectMemoryPanel({
     }
   };
 
+  const handleCopySourceLocator = async () => {
+    if (!selectedSourceLocator?.available) {
+      return;
+    }
+    const lines = [
+      selectedSourceLocator.threadId ? `threadId: ${selectedSourceLocator.threadId}` : null,
+      selectedSourceLocator.turnId ? `turnId: ${selectedSourceLocator.turnId}` : null,
+      selectedSourceLocator.engine ? `engine: ${selectedSourceLocator.engine}` : null,
+    ].filter((entry): entry is string => Boolean(entry));
+    try {
+      if (!navigator.clipboard) {
+        throw new Error(t("memory.copyUnavailable"));
+      }
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopyMessage(t("memory.sourceLocatorCopied"));
+    } catch (err) {
+      setCopyMessage(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleSetReviewState = async (nextReviewState: ProjectMemoryReviewState) => {
+    if (!selectedItem) {
+      return;
+    }
+    setDetailSaving(true);
+    setDeleteError(null);
+    try {
+      await updateMemory(selectedItem.id, {
+        reviewState: nextReviewState,
+      });
+      setPollutionMessage(
+        t("memory.reviewStateUpdated", {
+          state: reviewStateLabel(nextReviewState),
+        }),
+      );
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const handleConvertToManualNote = async () => {
+    if (!workspaceId || !selectedItem) {
+      return;
+    }
+    setDetailSaving(true);
+    setDeleteError(null);
+    try {
+      await projectMemoryFacade.create({
+        workspaceId,
+        recordKind: "manual_note",
+        kind: "note",
+        title: resolveProjectMemoryCompactTitle(selectedItem),
+        summary: resolveProjectMemoryCompactSummary(selectedItem),
+        detail: resolveProjectMemoryDetailText(selectedItem, {
+          userInput: t("memory.turnUserInput"),
+          assistantResponse: t("memory.turnAssistantResponse"),
+          assistantThinkingSummary: t("memory.turnAssistantThinkingSummary"),
+          threadId: "threadId",
+          turnId: "turnId",
+          engine: "engine",
+        }),
+        tags: selectedItem.tags,
+        importance: selectedItem.importance,
+        source: "manual",
+      });
+      await updateMemory(selectedItem.id, {
+        reviewState: "converted",
+      });
+      setPollutionMessage(t("memory.reviewConverted"));
+      await refresh();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const handleRunDiagnostics = async () => {
+    if (!workspaceId) {
+      return;
+    }
+    setDiagnosticsBusy("diagnostics");
+    setDeleteError(null);
+    try {
+      setDiagnostics(await projectMemoryFacade.diagnostics(workspaceId));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const handleRunReconcileDryRun = async () => {
+    if (!workspaceId) {
+      return;
+    }
+    setDiagnosticsBusy("dry-run");
+    setDeleteError(null);
+    try {
+      const result = await projectMemoryFacade.reconcile(workspaceId, true);
+      setReconcileResult(result);
+      setPollutionMessage(t("memory.reconcileDryRunDone", { count: result.fixableCount }));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const handleApplyReconcile = async () => {
+    if (!workspaceId) {
+      return;
+    }
+    setShowReconcileApplyConfirm(false);
+    setDiagnosticsBusy("apply");
+    setDeleteError(null);
+    try {
+      const result = await projectMemoryFacade.reconcile(workspaceId, false);
+      setReconcileResult(result);
+      setPollutionMessage(t("memory.reconcileApplyDone", { count: result.fixedCount }));
+      await refresh();
+      setDiagnostics(await projectMemoryFacade.diagnostics(workspaceId));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!selectedItem) {
       return;
@@ -593,6 +812,25 @@ export function ProjectMemoryPanel({
 
   const renderManagerBody = (isModal: boolean) => (
     <div className={`project-memory-body${isModal ? " is-modal" : ""}`}>
+      <div className="project-memory-workbench-strip" aria-label={t("memory.workbenchOverview")}>
+        <div className="project-memory-workbench-stat">
+          <span>{t("memory.workbenchTotal")}</span>
+          <strong>{total}</strong>
+        </div>
+        <div className="project-memory-workbench-stat">
+          <span>{t("memory.workbenchSelected")}</span>
+          <strong>{selectedIds.size}</strong>
+        </div>
+        <div className="project-memory-workbench-stat">
+          <span>{t("memory.workbenchReview")}</span>
+          <strong>{reviewInboxCount}</strong>
+        </div>
+        <div className="project-memory-workbench-stat">
+          <span>{t("memory.workbenchHealth")}</span>
+          <strong>{healthIssueCount}</strong>
+        </div>
+      </div>
+
       <div className="project-memory-toolbar">
         <label className="project-memory-search">
           <Search size={14} aria-hidden />
@@ -624,6 +862,34 @@ export function ProjectMemoryPanel({
           <option value="medium">{t("memory.importance.medium")}</option>
           <option value="low">{t("memory.importance.low")}</option>
         </select>
+        <select
+          value={reviewFilter}
+          onChange={(event) =>
+            setReviewFilter(event.target.value as ProjectMemoryReviewState | "all")
+          }
+          className="project-memory-kind-select"
+        >
+          <option value="all">{t("memory.review.all")}</option>
+          <option value="unreviewed">{t("memory.review.unreviewed")}</option>
+          <option value="kept">{t("memory.review.kept")}</option>
+          <option value="converted">{t("memory.review.converted")}</option>
+          <option value="obsolete">{t("memory.review.obsolete")}</option>
+          <option value="dismissed">{t("memory.review.dismissed")}</option>
+        </select>
+        <select
+          value={healthFilter}
+          onChange={(event) =>
+            setHealthFilter(event.target.value as ProjectMemoryHealthState | "all")
+          }
+          className="project-memory-kind-select"
+        >
+          <option value="all">{t("memory.health.all")}</option>
+          <option value="complete">{t("memory.health.complete")}</option>
+          <option value="input_only">{t("memory.health.inputOnly")}</option>
+          <option value="assistant_only">{t("memory.health.assistantOnly")}</option>
+          <option value="pending_fusion">{t("memory.health.pendingFusion")}</option>
+          <option value="capture_failed">{t("memory.health.captureFailed")}</option>
+        </select>
         <input
           className="project-memory-tag-input"
           list="project-memory-tag-suggestions"
@@ -641,7 +907,7 @@ export function ProjectMemoryPanel({
       {availableTags.length > 0 ? (
         <div className="project-memory-tag-quick-filters">
           <span className="project-memory-tag-quick-label">{t("memory.quickTags")}</span>
-          {availableTags.map((entry) => {
+          {visibleQuickTags.map((entry) => {
             const active = activeTagTerms.includes(entry);
             return (
               <button
@@ -654,6 +920,18 @@ export function ProjectMemoryPanel({
               </button>
             );
           })}
+          {hiddenQuickTagCount > 0 || showAllQuickTags ? (
+            <button
+              type="button"
+              className="project-memory-tag-chip project-memory-tag-chip-more"
+              onClick={() => setShowAllQuickTags((value) => !value)}
+              aria-expanded={showAllQuickTags}
+            >
+              {showAllQuickTags
+                ? t("memory.quickTagsCollapse")
+                : t("memory.quickTagsMore", { count: hiddenQuickTagCount })}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -753,85 +1031,190 @@ export function ProjectMemoryPanel({
                   : t("memory.cleanupHint")}
             </div>
           </div>
+          <div className="project-memory-cleanup project-memory-diagnostics">
+            <div className="project-memory-cleanup-header">
+              <div className="project-memory-cleanup-title">{t("memory.diagnosticsTitle")}</div>
+              <div className="project-memory-cleanup-actions">
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => {
+                    void handleRunDiagnostics();
+                  }}
+                  disabled={!workspaceId || diagnosticsBusy !== null}
+                >
+                  <ShieldCheck size={13} aria-hidden />
+                  <span>
+                    {diagnosticsBusy === "diagnostics"
+                      ? t("memory.diagnosticsRunning")
+                      : t("memory.diagnosticsRun")}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => {
+                    void handleRunReconcileDryRun();
+                  }}
+                  disabled={!workspaceId || diagnosticsBusy !== null}
+                >
+                  {diagnosticsBusy === "dry-run"
+                    ? t("memory.reconcileRunning")
+                    : t("memory.reconcileDryRun")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact danger"
+                  onClick={() => setShowReconcileApplyConfirm(true)}
+                  disabled={
+                    !workspaceId ||
+                    diagnosticsBusy !== null ||
+                    !reconcileResult ||
+                    reconcileResult.fixableCount === 0
+                  }
+                >
+                  <Wrench size={13} aria-hidden />
+                  <span>
+                    {diagnosticsBusy === "apply"
+                      ? t("memory.reconcileRunning")
+                      : t("memory.reconcileApply")}
+                  </span>
+                </button>
+              </div>
+            </div>
+            <div className="project-memory-cleanup-hint">
+              {diagnostics
+                ? t("memory.diagnosticsSummary", {
+                    total: diagnostics.total,
+                    incomplete:
+                      diagnostics.healthCounts.input_only +
+                      diagnostics.healthCounts.assistant_only +
+                      diagnostics.healthCounts.pending_fusion +
+                      diagnostics.healthCounts.capture_failed,
+                    duplicates: diagnostics.duplicateTurnGroups.length,
+                    badFiles: diagnostics.badFiles.length,
+                  })
+                : t("memory.diagnosticsHint")}
+            </div>
+            {reconcileResult ? (
+              <div className="project-memory-cleanup-hint">
+                {t("memory.reconcileSummary", {
+                  fixable: reconcileResult.fixableCount,
+                  fixed: reconcileResult.fixedCount,
+                  skipped: reconcileResult.skippedCount,
+                })}
+              </div>
+            ) : null}
+          </div>
       </div>
 
       <div className="project-memory-content">
-        <aside className="project-memory-list">
+        <aside className="project-memory-list" aria-label={t("memory.memoryList")}>
+          <div className="project-memory-list-toolbar">
+            <span>{t("memory.memoryList")}</span>
+            <span>{t("memory.pageMeta", {
+              from: total === 0 ? 0 : page * pageSize + 1,
+              to: Math.min(total, (page + 1) * pageSize),
+              total,
+            })}</span>
+          </div>
           {emptyMessage ? (
             <div className="project-memory-empty">{emptyMessage}</div>
+          ) : filteredItems.length === 0 ? (
+            <div className="project-memory-empty">{t("memory.filteredEmpty")}</div>
           ) : (
-            items.map((item) => (
-              <div
-                key={item.id}
-                className={`project-memory-list-item${
-                  selectedId === item.id ? " is-active" : ""
-                }${selectedIds.has(item.id) ? " is-selected" : ""}${
-                  item.importance ? ` importance-${item.importance}` : ""
-                }`}
-                onClick={() => toggleSelectItem(item.id)}
-              >
-                <label className="project-memory-list-checkbox" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(item.id)}
-                    onChange={() => toggleSelectItem(item.id)}
-                  />
-                  <span className="checkbox-indicator" />
-                </label>
+            filteredItems.map((item) => {
+              const recordKind = getProjectMemoryDisplayRecordKind(item);
+              const healthState = deriveProjectMemoryHealthState(item);
+              const reviewState = deriveProjectMemoryReviewState(item);
+              const compactTitle = resolveProjectMemoryCompactTitle(item);
+              const compactSummary = resolveProjectMemoryCompactSummary(item);
+              return (
                 <div
-                  className="project-memory-list-item-content"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedId(item.id);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setSelectedId(item.id);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
+                  key={item.id}
+                  className={`project-memory-list-item${
+                    selectedId === item.id ? " is-active" : ""
+                  }${selectedIds.has(item.id) ? " is-selected" : ""}${
+                    item.importance ? ` importance-${item.importance}` : ""
+                  }${reviewState === "obsolete" ? " is-obsolete" : ""}${
+                    reviewState === "dismissed" ? " is-dismissed" : ""
+                  }`}
+                  onClick={() => toggleSelectItem(item.id)}
                 >
-                  <div className="project-memory-list-item-head">
-                    <div className="project-memory-list-head-left">
-                      <span
-                        className={`project-memory-list-kind kind-${item.kind.replace(/_/g, "-")}`}
-                      >
-                        {kindLabel(item.kind)}
-                      </span>
-                      <span
-                        className={`project-memory-record-kind record-${getProjectMemoryDisplayRecordKind(item).replace(/_/g, "-")}`}
-                      >
-                        {recordKindLabel(getProjectMemoryDisplayRecordKind(item))}
-                      </span>
-                      {isConversationTurnMemory(item) && item.engine ? (
-                        <span className="project-memory-list-engine">
-                          {item.engine.toUpperCase()}
+                  <label className="project-memory-list-checkbox" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => toggleSelectItem(item.id)}
+                    />
+                    <span className="checkbox-indicator" />
+                  </label>
+                  <div
+                    className="project-memory-list-item-content"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedId(item.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedId(item.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="project-memory-list-item-head">
+                      <div className="project-memory-list-head-left">
+                        <span
+                          className={`project-memory-list-kind kind-${item.kind.replace(/_/g, "-")}`}
+                        >
+                          {kindLabel(item.kind)}
                         </span>
-                      ) : null}
+                        <span
+                          className={`project-memory-record-kind record-${recordKind.replace(/_/g, "-")}`}
+                        >
+                          {recordKindLabel(recordKind)}
+                        </span>
+                        {isConversationTurnMemory(item) && item.engine ? (
+                          <span className="project-memory-list-engine">
+                            {item.engine.toUpperCase()}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="project-memory-list-importance">
+                        {importanceLabel(item.importance)}
+                      </span>
                     </div>
-                    <span className="project-memory-list-importance">
-                      {importanceLabel(item.importance)}
-                    </span>
+                    <div className="project-memory-list-title">{compactTitle}</div>
+                    <div className="project-memory-list-summary">{compactSummary}</div>
+                    <div className="project-memory-list-meta-row">
+                      <span>{formatMemoryDateTime(item.updatedAt)}</span>
+                      <span>{healthStateLabel(healthState)}</span>
+                      <span>{reviewStateLabel(reviewState)}</span>
+                    </div>
+                    {item.tags && item.tags.length > 0 ? (
+                      <div className="project-memory-list-tags">
+                        {item.tags.slice(0, 3).map((entry) => (
+                          <span key={entry} className="project-memory-list-tag">
+                            {entry}
+                          </span>
+                        ))}
+                        {item.tags.length > 3 ? (
+                          <span className="project-memory-list-tag project-memory-list-tag-muted">
+                            +{item.tags.length - 3}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="project-memory-list-summary">{item.summary}</div>
-                  {item.tags && item.tags.length > 0 ? (
-                    <div className="project-memory-list-tags">
-                      {item.tags.slice(0, 4).map((entry) => (
-                        <span key={entry} className="project-memory-list-tag">
-                          {entry}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </aside>
 
-        <div className="project-memory-detail">
+        <div className="project-memory-detail" aria-label={t("memory.memoryDetail")}>
           {selectedItem ? (
             <>
               <div className="project-memory-detail-readonly-head">
@@ -858,6 +1241,30 @@ export function ProjectMemoryPanel({
                     ))}
                   </div>
                 ) : null}
+                <div className="project-memory-source-locator">
+                  <div>
+                    <span className="project-memory-source-locator-label">
+                      {t("memory.sourceLocator")}
+                    </span>
+                    <span className="project-memory-source-locator-status">
+                      {selectedSourceLocator?.available
+                        ? t("memory.sourceLocatorAvailable")
+                        : t("memory.sourceLocatorUnavailable")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="project-memory-action-btn compact"
+                    onClick={() => {
+                      void handleCopySourceLocator();
+                    }}
+                    disabled={!selectedSourceLocator?.available}
+                    aria-label={t("memory.copySourceLocator")}
+                  >
+                    <Copy size={13} aria-hidden />
+                    <span>{t("memory.copySourceLocator")}</span>
+                  </button>
+                </div>
               </div>
               {detailLoading ? (
                 <div className="project-memory-detail-status">{t("memory.detailLoading")}</div>
@@ -939,6 +1346,48 @@ export function ProjectMemoryPanel({
               {copyMessage ? (
                 <div className="project-memory-detail-status">{copyMessage}</div>
               ) : null}
+              <div className="project-memory-review-actions" aria-label={t("memory.reviewActions")}>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => {
+                    void handleSetReviewState("kept");
+                  }}
+                  disabled={detailSaving}
+                >
+                  {t("memory.reviewKeep")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => {
+                    void handleConvertToManualNote();
+                  }}
+                  disabled={detailSaving || !selectedIsConversationTurn}
+                >
+                  {t("memory.reviewConvert")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => {
+                    void handleSetReviewState("obsolete");
+                  }}
+                  disabled={detailSaving}
+                >
+                  {t("memory.reviewObsolete")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => {
+                    void handleSetReviewState("dismissed");
+                  }}
+                  disabled={detailSaving}
+                >
+                  {t("memory.reviewDismiss")}
+                </button>
+              </div>
             </>
           ) : (
             <div className="project-memory-empty">{t("memory.selectRecord")}</div>
@@ -1194,6 +1643,39 @@ export function ProjectMemoryPanel({
                 }}
               >
                 {t("memory.confirmDelete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReconcileApplyConfirm && (
+        <div className="project-memory-confirm-dialog">
+          <div
+            className="project-memory-confirm-backdrop"
+            onClick={() => setShowReconcileApplyConfirm(false)}
+          />
+          <div className="project-memory-confirm-card">
+            <h3 className="project-memory-confirm-title">{t("memory.reconcileApply")}</h3>
+            <p className="project-memory-confirm-message">
+              {t("memory.reconcileApplyConfirm")}
+            </p>
+            <div className="project-memory-confirm-actions">
+              <button
+                type="button"
+                className="project-memory-action-btn"
+                onClick={() => setShowReconcileApplyConfirm(false)}
+              >
+                {t("memory.cancel")}
+              </button>
+              <button
+                type="button"
+                className="project-memory-action-btn danger"
+                onClick={() => {
+                  void handleApplyReconcile();
+                }}
+              >
+                {t("memory.reconcileApply")}
               </button>
             </div>
           </div>

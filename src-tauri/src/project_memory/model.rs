@@ -30,6 +30,8 @@ pub(crate) struct ProjectMemoryItem {
     pub assistant_response: Option<String>,
     #[serde(default)]
     pub assistant_thinking_summary: Option<String>,
+    #[serde(default)]
+    pub review_state: Option<String>,
     pub source: String,
     pub fingerprint: String,
     pub created_at: i64,
@@ -78,6 +80,54 @@ pub(crate) struct ProjectMemoryListResult {
     pub total: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectMemoryHealthCounts {
+    pub complete: usize,
+    pub input_only: usize,
+    pub assistant_only: usize,
+    pub pending_fusion: usize,
+    pub capture_failed: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectMemoryDuplicateTurnGroup {
+    pub workspace_id: String,
+    pub thread_id: String,
+    pub turn_id: String,
+    pub memory_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectMemoryBadFile {
+    pub file_name: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectMemoryDiagnosticsResult {
+    pub workspace_id: String,
+    pub total: usize,
+    pub health_counts: ProjectMemoryHealthCounts,
+    pub duplicate_turn_groups: Vec<ProjectMemoryDuplicateTurnGroup>,
+    pub bad_files: Vec<ProjectMemoryBadFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectMemoryReconcileResult {
+    pub workspace_id: String,
+    pub dry_run: bool,
+    pub fixable_count: usize,
+    pub fixed_count: usize,
+    pub skipped_count: usize,
+    pub duplicate_groups: usize,
+    pub changed_memory_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CreateProjectMemoryInput {
@@ -97,6 +147,7 @@ pub(crate) struct CreateProjectMemoryInput {
     pub user_input: Option<String>,
     pub assistant_response: Option<String>,
     pub assistant_thinking_summary: Option<String>,
+    pub review_state: Option<String>,
     pub source: Option<String>,
     pub workspace_name: Option<String>,
     pub workspace_path: Option<String>,
@@ -121,6 +172,7 @@ pub(crate) struct UpdateProjectMemoryInput {
     pub user_input: Option<String>,
     pub assistant_response: Option<String>,
     pub assistant_thinking_summary: Option<String>,
+    pub review_state: Option<String>,
     pub source: Option<String>,
     pub workspace_name: Option<String>,
     pub workspace_path: Option<String>,

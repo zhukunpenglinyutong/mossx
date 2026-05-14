@@ -325,6 +325,9 @@ export type InjectionResult = {
     | "low_relevance"
     | "manual_empty"
     | "query_failed"
+    | "scout_empty"
+    | "scout_timeout"
+    | "scout_error"
     | null;
 };
 

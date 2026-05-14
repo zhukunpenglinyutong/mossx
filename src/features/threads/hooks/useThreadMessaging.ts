@@ -32,6 +32,11 @@ import {
   injectSelectedMemoriesContext,
   type InjectionResult,
 } from "../../project-memory/utils/memoryContextInjection";
+import {
+  injectMemoryScoutBriefContext,
+  scoutProjectMemory,
+  type MemoryBrief,
+} from "../../project-memory/utils/memoryScout";
 import { noteCardsFacade } from "../../note-cards/services/noteCardsFacade";
 import {
   injectSelectedNoteCardsContext,
@@ -107,6 +112,7 @@ type SendMessageOptions = {
   resumeTurnId?: string | null;
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  memoryReferenceEnabled?: boolean;
   selectedNoteCardIds?: string[];
   selectedAgent?: {
     id: string;
@@ -166,6 +172,26 @@ const shouldEmitThreadMessagingDevLogs = (() => {
     return false;
   }
 })();
+const MEMORY_SCOUT_TIMEOUT_MS = 1500;
+
+function withMemoryScoutTimeout(action: Promise<MemoryBrief>, timeoutMs = MEMORY_SCOUT_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  return Promise.race<MemoryBrief>([
+    action,
+    new Promise((resolve) => {
+      window.setTimeout(() => {
+        resolve({
+          status: "timeout",
+          query: "",
+          items: [],
+          conflicts: [],
+          truncated: false,
+          elapsedMs: Date.now() - startedAt,
+        });
+      }, timeoutMs);
+    }),
+  ]);
+}
 
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -446,6 +472,7 @@ export function useThreadMessaging({
             .filter((entry) => entry.length > 0),
         ),
       );
+      const memoryReferenceEnabled = options?.memoryReferenceEnabled === true;
       const selectedNoteCardIds = Array.from(
         new Set(
           (options?.selectedNoteCardIds ?? [])
@@ -487,6 +514,42 @@ export function useThreadMessaging({
         });
       }
       finalText = injectionResult.finalText;
+      let memoryScoutInjectionResult: InjectionResult = {
+        finalText,
+        injectedCount: 0,
+        injectedChars: 0,
+        retrievalMs: 0,
+        previewText: null,
+        disabledReason: null,
+      };
+      if (memoryReferenceEnabled) {
+        dispatch({
+          type: "upsertItem",
+          workspaceId: workspace.id,
+          threadId,
+          item: {
+            id: `memory-scout-querying-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`,
+            kind: "message",
+            role: "assistant",
+            text: `${MEMORY_CONTEXT_SUMMARY_PREFIX}\nMemory Reference: querying project memory...`,
+          },
+          hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+        const memoryBrief = await withMemoryScoutTimeout(
+          scoutProjectMemory({
+            workspaceId: workspace.id,
+            query: visibleUserText,
+            listFn: projectMemoryFacade.listSummary,
+          }),
+        );
+        memoryScoutInjectionResult = injectMemoryScoutBriefContext({
+          userText: finalText,
+          brief: memoryBrief,
+        });
+        finalText = memoryScoutInjectionResult.finalText;
+      }
       let finalImages = [...images];
       if (selectedNoteCardIds.length > 0) {
         const selectedNotes = (
@@ -590,6 +653,22 @@ export function useThreadMessaging({
           hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
         });
       }
+      if (memoryReferenceEnabled && memoryScoutInjectionResult.previewText) {
+        dispatch({
+          type: "upsertItem",
+          workspaceId: workspace.id,
+          threadId,
+          item: {
+            id: `memory-scout-context-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`,
+            kind: "message",
+            role: "assistant",
+            text: `${MEMORY_CONTEXT_SUMMARY_PREFIX}\n${memoryScoutInjectionResult.previewText}`,
+          },
+          hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+      }
       if (noteInjectionResult.injectedCount > 0 && noteInjectionResult.previewText) {
         dispatch({
           type: "upsertItem",
@@ -604,6 +683,25 @@ export function useThreadMessaging({
             text: `${NOTE_CARD_CONTEXT_SUMMARY_PREFIX}\n${noteInjectionResult.previewText}`,
           },
           hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+      }
+      if (memoryReferenceEnabled) {
+        onDebug?.({
+          id: `${Date.now()}-memory-scout-result`,
+          timestamp: Date.now(),
+          source: "client",
+          label:
+            memoryScoutInjectionResult.injectedCount > 0
+              ? "memory/scout-injected"
+              : "memory/scout-skipped",
+          payload: {
+            workspaceId: workspace.id,
+            threadId,
+            injectedCount: memoryScoutInjectionResult.injectedCount,
+            injectedChars: memoryScoutInjectionResult.injectedChars,
+            retrievalMs: memoryScoutInjectionResult.retrievalMs,
+            reason: memoryScoutInjectionResult.disabledReason,
+          },
         });
       }
       if (injectionResult.injectedCount > 0) {

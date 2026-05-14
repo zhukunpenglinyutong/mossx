@@ -8,6 +8,13 @@ export type ProjectMemorySettings = {
   workspaceOverrides: Record<string, { autoEnabled?: boolean }>;
 };
 
+export type ProjectMemoryReviewState =
+  | "unreviewed"
+  | "kept"
+  | "converted"
+  | "obsolete"
+  | "dismissed";
+
 export type ProjectMemoryItem = {
   id: string;
   workspaceId: string;
@@ -28,6 +35,7 @@ export type ProjectMemoryItem = {
   userInput?: string | null;
   assistantResponse?: string | null;
   assistantThinkingSummary?: string | null;
+  reviewState?: ProjectMemoryReviewState | null;
   source: string;
   fingerprint: string;
   createdAt: number;
@@ -54,6 +62,39 @@ export type NormalizedConversationTurnPayload = {
 export type ProjectMemoryListResult = {
   items: ProjectMemoryItem[];
   total: number;
+};
+
+export type ProjectMemoryHealthState =
+  | "complete"
+  | "input_only"
+  | "assistant_only"
+  | "pending_fusion"
+  | "capture_failed";
+
+export type ProjectMemoryDiagnosticsResult = {
+  workspaceId: string;
+  total: number;
+  healthCounts: Record<ProjectMemoryHealthState, number>;
+  duplicateTurnGroups: Array<{
+    workspaceId: string;
+    threadId: string;
+    turnId: string;
+    memoryIds: string[];
+  }>;
+  badFiles: Array<{
+    fileName: string;
+    error: string;
+  }>;
+};
+
+export type ProjectMemoryReconcileResult = {
+  workspaceId: string;
+  dryRun: boolean;
+  fixableCount: number;
+  fixedCount: number;
+  skippedCount: number;
+  duplicateGroups: number;
+  changedMemoryIds: string[];
 };
 
 export async function projectMemoryGetSettings(): Promise<ProjectMemorySettings> {
@@ -134,6 +175,7 @@ export async function projectMemoryCreate(input: {
   userInput?: string | null;
   assistantResponse?: string | null;
   assistantThinkingSummary?: string | null;
+  reviewState?: ProjectMemoryReviewState | null;
   source?: string | null;
   workspaceName?: string | null;
   workspacePath?: string | null;
@@ -157,6 +199,7 @@ export async function projectMemoryCreate(input: {
       userInput: input.userInput ?? null,
       assistantResponse: input.assistantResponse ?? null,
       assistantThinkingSummary: input.assistantThinkingSummary ?? null,
+      reviewState: input.reviewState ?? null,
       source: input.source ?? null,
       workspaceName: input.workspaceName ?? null,
       workspacePath: input.workspacePath ?? null,
@@ -184,6 +227,7 @@ export async function projectMemoryUpdate(
     userInput?: string | null;
     assistantResponse?: string | null;
     assistantThinkingSummary?: string | null;
+    reviewState?: ProjectMemoryReviewState | null;
     source?: string | null;
     workspaceName?: string | null;
     workspacePath?: string | null;
@@ -209,6 +253,7 @@ export async function projectMemoryUpdate(
       userInput: patch.userInput ?? null,
       assistantResponse: patch.assistantResponse ?? null,
       assistantThinkingSummary: patch.assistantThinkingSummary ?? null,
+      reviewState: patch.reviewState ?? null,
       source: patch.source ?? null,
       workspaceName: patch.workspaceName ?? null,
       workspacePath: patch.workspacePath ?? null,
@@ -224,6 +269,24 @@ export async function projectMemoryDelete(
   return invoke<void>("project_memory_delete", {
     memoryId,
     workspaceId,
+  });
+}
+
+export async function projectMemoryDiagnostics(
+  workspaceId: string,
+): Promise<ProjectMemoryDiagnosticsResult> {
+  return invoke<ProjectMemoryDiagnosticsResult>("project_memory_diagnostics", {
+    workspaceId,
+  });
+}
+
+export async function projectMemoryReconcile(
+  workspaceId: string,
+  dryRun: boolean,
+): Promise<ProjectMemoryReconcileResult> {
+  return invoke<ProjectMemoryReconcileResult>("project_memory_reconcile", {
+    workspaceId,
+    dryRun,
   });
 }
 

@@ -138,18 +138,24 @@ export {
   projectMemoryCompleteTurn,
   projectMemoryCreate,
   projectMemoryDelete,
+  projectMemoryDiagnostics,
   projectMemoryGet,
   projectMemoryGetDetail,
   projectMemoryGetSettings,
   projectMemoryList,
   projectMemoryListSummary,
+  projectMemoryReconcile,
   projectMemoryUpdate,
   projectMemoryUpdateSettings,
 } from "./tauri/projectMemory";
 export type {
   NormalizedConversationTurnPayload,
+  ProjectMemoryDiagnosticsResult,
+  ProjectMemoryHealthState,
   ProjectMemoryItem,
   ProjectMemoryListResult,
+  ProjectMemoryReconcileResult,
+  ProjectMemoryReviewState,
   ProjectMemorySettings,
 } from "./tauri/projectMemory";
 export {

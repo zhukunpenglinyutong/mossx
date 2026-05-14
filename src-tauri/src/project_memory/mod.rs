@@ -1,6 +1,7 @@
 mod classification;
 pub(crate) mod commands;
 mod compat;
+mod diagnostics;
 mod model;
 mod projection;
 mod search;
@@ -9,8 +10,11 @@ mod store;
 
 use classification::*;
 use compat::*;
+use diagnostics::*;
 pub(crate) use model::{
-    AutoCaptureInput, CreateProjectMemoryInput, ProjectMemoryItem, ProjectMemoryListResult,
+    AutoCaptureInput, CreateProjectMemoryInput, ProjectMemoryBadFile,
+    ProjectMemoryDiagnosticsResult, ProjectMemoryDuplicateTurnGroup, ProjectMemoryHealthCounts,
+    ProjectMemoryItem, ProjectMemoryListResult, ProjectMemoryReconcileResult,
     ProjectMemorySettings, UpdateProjectMemoryInput,
 };
 use projection::*;

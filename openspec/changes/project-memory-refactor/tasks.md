@@ -75,6 +75,12 @@
 - [x] 8.7 [P0][验证:`pnpm vitest run src/features/threads/hooks/useThreads.memory-race.integration.test.tsx`][目标: 引擎覆盖矩阵][完成定义: Codex 与 Claude Code 覆盖 full `userInput + assistantResponse` 主链路；Gemini 至少覆盖 normalized adapter smoke，且无 engine-specific Project Memory store/API]
 - [x] 8.8 [P1][验证:`npm run lint && npm run build`][目标: 发布候选门禁][完成定义: lint/build 通过]
 
+## 9. Composer Memory Reference Entry
+
+- [x] 9.1 [P1][文件:`src/features/composer/components/ChatInputBox/ButtonArea.tsx`,`src/styles/composer.part2.css`,`src/i18n/locales/*`][目标: 将单次记忆引用入口放入发送按钮旁][完成定义: 工具栏只保留记忆 icon，不常驻说明文本；未开启时点击 icon 弹出二次确认]
+- [x] 9.2 [P1][文件:`src/features/composer/components/ChatInputBox/ButtonArea.tsx`,`src/styles/composer.part2.css`][目标: 确认弹窗保持紧凑][完成定义: 弹窗使用标题、状态、一句说明和确认/取消按钮，不出现两段以上长提示或大面积留白]
+- [x] 9.3 [P1][文件:`src/features/composer/components/ChatInputBox/ButtonArea.test.tsx`,`src/features/composer/components/Composer.memory-reference.test.tsx`][目标: 覆盖单次启用/自动关闭路径][完成定义: 未开启时需确认才启用；开启后点击 icon 直接关闭；发送或上下文重置后恢复关闭]
+
 ## Parallelization Notes
 
 - `1.x` 必须先完成，不能和 UI 大改并行。

@@ -1069,7 +1069,6 @@ export const MessageRow = memo(function MessageRow({
     !hasText
     && imageItems.length === 0
     && deferredImageItems.length === 0
-    && !resolvedMemorySummary
   ) || (
     item.role === "assistant"
     && (Boolean(resolvedMemorySummary) || Boolean(resolvedNoteCardSummary))
@@ -1256,37 +1255,6 @@ export const MessageRow = memo(function MessageRow({
           })}
         </div>
       ) : null}
-      {resolvedMemorySummary ? (
-        <div className="memory-context-summary-card">
-          <button
-            type="button"
-            className="memory-context-summary-toggle"
-            onClick={() => setMemorySummaryExpanded((current) => !current)}
-            aria-expanded={memorySummaryExpanded}
-          >
-            <span className="memory-context-summary-title">
-              {t("messages.memoryContextSummary")}
-            </span>
-            <span className="memory-context-summary-count">
-              {t("messages.memoryContextSummaryCount", {
-                count: resolvedMemorySummary.lines.length,
-              })}
-            </span>
-            {memorySummaryExpanded ? (
-              <ChevronUp size={14} aria-hidden />
-            ) : (
-              <ChevronDown size={14} aria-hidden />
-            )}
-          </button>
-          {memorySummaryExpanded && (
-            <div className="memory-context-summary-content">
-              {resolvedMemorySummary.lines.map((line, index) => (
-                <p key={`${item.id}-line-${index}`}>{line}</p>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
       {runtimeReconnectHint && showRuntimeReconnectCard ? (
         <RuntimeReconnectCard
           hint={runtimeReconnectHint}
@@ -1370,15 +1338,46 @@ export const MessageRow = memo(function MessageRow({
     agentTaskNotification
     || imageItems.length > 0
     || deferredImageItems.length > 0
-    || Boolean(resolvedMemorySummary)
     || (Boolean(runtimeReconnectHint) && showRuntimeReconnectCard)
     || hasText
     || !hideCopyButton;
-  if (!noteCardSummaryNode && !shouldRenderBubble) {
+  const memorySummaryNode = resolvedMemorySummary ? (
+    <div className="memory-context-summary-card">
+      <button
+        type="button"
+        className="memory-context-summary-toggle"
+        onClick={() => setMemorySummaryExpanded((current) => !current)}
+        aria-expanded={memorySummaryExpanded}
+      >
+        <span className="memory-context-summary-title">
+          {t("messages.memoryContextSummary")}
+        </span>
+        <span className="memory-context-summary-count">
+          {t("messages.memoryContextSummaryCount", {
+            count: resolvedMemorySummary.lines.length,
+          })}
+        </span>
+        {memorySummaryExpanded ? (
+          <ChevronUp size={14} aria-hidden />
+        ) : (
+          <ChevronDown size={14} aria-hidden />
+        )}
+      </button>
+      {memorySummaryExpanded && (
+        <div className="memory-context-summary-content">
+          {resolvedMemorySummary.lines.map((line, index) => (
+            <p key={`${item.id}-line-${index}`}>{line}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
+  if (!memorySummaryNode && !noteCardSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble) {
     return null;
   }
-  const stackedContent = noteCardSummaryNode || codeAnnotationContextNode ? (
+  const stackedContent = memorySummaryNode || noteCardSummaryNode || codeAnnotationContextNode ? (
     <div className={`message-context-stack${item.role === "user" ? " is-user" : ""}`}>
+      {memorySummaryNode}
       {codeAnnotationContextNode}
       {noteCardSummaryNode}
       {shouldRenderBubble ? bubbleNode : null}

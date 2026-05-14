@@ -595,6 +595,7 @@ fn write_and_read_date_file_roundtrip() {
         user_input: None,
         assistant_response: None,
         assistant_thinking_summary: None,
+        review_state: None,
         source: "manual".to_string(),
         fingerprint: "abc123".to_string(),
         created_at: 1000,
@@ -638,6 +639,7 @@ fn find_memory_in_workspace_finds_correct_file() {
         user_input: None,
         assistant_response: None,
         assistant_thinking_summary: None,
+        review_state: None,
         source: "manual".to_string(),
         fingerprint: "fp1".to_string(),
         created_at: 1000,
@@ -688,6 +690,7 @@ fn read_workspace_memories_aggregates_multiple_days() {
         user_input: None,
         assistant_response: None,
         assistant_thinking_summary: None,
+        review_state: None,
         source: "manual".to_string(),
         fingerprint: id.to_string(),
         created_at: 1000,
@@ -741,6 +744,7 @@ fn read_workspace_memories_skips_bad_json_file() {
         user_input: None,
         assistant_response: None,
         assistant_thinking_summary: None,
+        review_state: None,
         source: "manual".to_string(),
         fingerprint: "good".to_string(),
         created_at: 1000,
@@ -796,6 +800,7 @@ fn conversation_turn_projection_preserves_full_input_and_response() {
         user_input: Some("完整用户输入".to_string()),
         assistant_response: Some(long_response.clone()),
         assistant_thinking_summary: None,
+        review_state: None,
         source: "conversation_turn".to_string(),
         fingerprint: String::new(),
         created_at: 1000,
@@ -853,6 +858,7 @@ fn apply_delete_semantics_physically_deletes_turn_and_soft_deletes_legacy() {
         user_input: record_kind.map(|_| "完整用户输入".to_string()),
         assistant_response: record_kind.map(|_| "完整 AI 回复".to_string()),
         assistant_thinking_summary: None,
+        review_state: None,
         source: record_kind.unwrap_or("auto").to_string(),
         fingerprint: id.to_string(),
         created_at: 1000,
@@ -903,6 +909,7 @@ fn find_turn_memory_in_workspace_uses_workspace_thread_and_turn_key() {
         user_input: Some("用户".to_string()),
         assistant_response: None,
         assistant_thinking_summary: None,
+        review_state: None,
         source: "conversation_turn".to_string(),
         fingerprint: "fp".to_string(),
         created_at: 1000,
@@ -924,5 +931,127 @@ fn find_turn_memory_in_workspace_uses_workspace_thread_and_turn_key() {
     let missing = find_turn_memory_in_workspace(&dir, "ws-1", "thread-1", "turn-2").unwrap();
     assert!(missing.is_none());
 
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn diagnostics_counts_health_duplicates_and_bad_files() {
+    let dir = std::env::temp_dir().join("codemoss-test-memory-diagnostics");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let make_turn = |id: &str, user_input: Option<&str>, assistant_response: Option<&str>| {
+        ProjectMemoryItem {
+            id: id.to_string(),
+            workspace_id: "ws-1".to_string(),
+            schema_version: Some(2),
+            record_kind: Some("conversation_turn".to_string()),
+            kind: "conversation".to_string(),
+            title: id.to_string(),
+            summary: id.to_string(),
+            detail: None,
+            raw_text: None,
+            clean_text: id.to_string(),
+            tags: vec![],
+            importance: "medium".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            message_id: Some("turn-1".to_string()),
+            assistant_message_id: None,
+            user_input: user_input.map(str::to_string),
+            assistant_response: assistant_response.map(str::to_string),
+            assistant_thinking_summary: None,
+            review_state: None,
+            source: "conversation_turn".to_string(),
+            fingerprint: id.to_string(),
+            created_at: 1000,
+            updated_at: 1000,
+            deleted_at: None,
+            workspace_name: None,
+            workspace_path: None,
+            engine: Some("codex".to_string()),
+        }
+    };
+    write_date_file(
+        &dir.join("2026-02-10.json"),
+        &[
+            make_turn("input-only", Some("用户输入"), None),
+            make_turn("assistant-only", None, Some("AI 回复")),
+        ],
+    )
+    .unwrap();
+    write_json_file_atomic(&dir.join("2026-02-10.001.json"), "{bad-json").unwrap();
+
+    let diagnostics = diagnose_workspace_memories("ws-1", &dir).unwrap();
+
+    assert_eq!(diagnostics.total, 2);
+    assert_eq!(diagnostics.health_counts.input_only, 1);
+    assert_eq!(diagnostics.health_counts.assistant_only, 1);
+    assert_eq!(diagnostics.duplicate_turn_groups.len(), 1);
+    assert_eq!(diagnostics.bad_files.len(), 1);
+    assert_eq!(diagnostics.bad_files[0].file_name, "2026-02-10.001.json");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn reconcile_dry_run_and_apply_merge_half_turns_without_deleting_facts() {
+    let dir = std::env::temp_dir().join("codemoss-test-memory-reconcile");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let make_turn = |id: &str, user_input: Option<&str>, assistant_response: Option<&str>| {
+        ProjectMemoryItem {
+            id: id.to_string(),
+            workspace_id: "ws-1".to_string(),
+            schema_version: Some(2),
+            record_kind: Some("conversation_turn".to_string()),
+            kind: "conversation".to_string(),
+            title: id.to_string(),
+            summary: id.to_string(),
+            detail: None,
+            raw_text: None,
+            clean_text: id.to_string(),
+            tags: vec![],
+            importance: "medium".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            turn_id: Some("turn-1".to_string()),
+            message_id: Some("turn-1".to_string()),
+            assistant_message_id: None,
+            user_input: user_input.map(str::to_string),
+            assistant_response: assistant_response.map(str::to_string),
+            assistant_thinking_summary: None,
+            review_state: None,
+            source: "conversation_turn".to_string(),
+            fingerprint: id.to_string(),
+            created_at: 1000,
+            updated_at: if id == "target" { 2000 } else { 1000 },
+            deleted_at: None,
+            workspace_name: None,
+            workspace_path: None,
+            engine: Some("codex".to_string()),
+        }
+    };
+    write_date_file(
+        &dir.join("2026-02-10.json"),
+        &[
+            make_turn("target", Some("完整用户输入"), None),
+            make_turn("source", None, Some("完整 AI 回复")),
+        ],
+    )
+    .unwrap();
+
+    let dry_run = reconcile_workspace_memories("ws-1", &dir, true).unwrap();
+    assert!(dry_run.dry_run);
+    assert_eq!(dry_run.fixable_count, 1);
+    assert_eq!(dry_run.fixed_count, 0);
+
+    let apply = reconcile_workspace_memories("ws-1", &dir, false).unwrap();
+    assert!(!apply.dry_run);
+    assert_eq!(apply.fixed_count, 1);
+    assert_eq!(apply.changed_memory_ids, vec!["target".to_string()]);
+
+    let items = read_date_file(&dir.join("2026-02-10.json")).unwrap();
+    let target = items.iter().find(|item| item.id == "target").unwrap();
+    assert_eq!(target.user_input.as_deref(), Some("完整用户输入"));
+    assert_eq!(target.assistant_response.as_deref(), Some("完整 AI 回复"));
+    assert!(items.iter().any(|item| item.id == "source"));
     let _ = std::fs::remove_dir_all(&dir);
 }

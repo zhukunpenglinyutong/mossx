@@ -1649,13 +1649,30 @@
   font-weight: 700;
   color: var(--text-strong);
   line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-memory-picker-card-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.38;
+  overflow-wrap: anywhere;
 }
 
 .composer-memory-picker-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .composer-memory-picker-card-meta-item {
@@ -1664,6 +1681,11 @@
   gap: 4px;
   font-size: 10px;
   color: var(--text-faint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
 }
 
 .composer-memory-picker-importance {
@@ -1692,6 +1714,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  max-height: 21px;
+  overflow: hidden;
 }
 
 .composer-memory-picker-tag {

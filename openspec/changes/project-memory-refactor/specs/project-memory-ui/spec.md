@@ -63,3 +63,28 @@
 - **THEN** 搜索 SHOULD 覆盖 `userInput`
 - **AND** SHOULD 覆盖 `assistantResponse`
 - **AND** SHOULD 保持对 legacy `title/summary/detail/cleanText` 的兼容搜索
+
+### Requirement: Composer 单次记忆引用入口
+系统 MUST 在 Composer 工具栏提供默认关闭的单次 Project Memory 引用入口。
+
+#### Scenario: 工具栏只显示紧凑 icon
+- **GIVEN** Composer 支持 Project Memory 引用
+- **WHEN** 系统渲染输入区底部工具栏
+- **THEN** 入口 SHOULD 位于发送按钮旁
+- **AND** 入口 MUST 使用 icon button 呈现
+- **AND** MUST NOT 在工具栏常驻长说明文案
+- **AND** 入口弹窗 SHOULD 使用现有 theme tokens 渲染背景、边框、文本与按钮
+- **AND** MUST NOT 依赖写死渐变或固定色板才能在不同主题下可读
+
+#### Scenario: 开启前需要二次确认
+- **GIVEN** 单次记忆引用处于关闭状态
+- **WHEN** 用户点击记忆引用 icon
+- **THEN** 系统 MUST 打开紧凑确认弹窗
+- **AND** 弹窗 MUST 说明本次发送会只读检索 Project Memory 并生成 Memory Brief
+- **AND** 用户确认前 MUST NOT 开启记忆引用
+
+#### Scenario: 单次引用发送后自动关闭
+- **GIVEN** 用户确认开启单次记忆引用
+- **WHEN** 本次消息发送完成或上下文被清空
+- **THEN** 系统 MUST 自动恢复关闭状态
+- **AND** 再次使用时 MUST 重新确认

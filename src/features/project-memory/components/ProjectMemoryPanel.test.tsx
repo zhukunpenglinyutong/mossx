@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectMemoryPanel } from "./ProjectMemoryPanel";
 import { useProjectMemory } from "../hooks/useProjectMemory";
@@ -11,6 +11,7 @@ const I18N_MAP: Record<string, { zh: string; en: string }> = {
   "memory.selectWorkspace": { zh: "请选择工作区", en: "Select workspace" },
   "memory.loading": { zh: "加载中", en: "Loading" },
   "memory.empty": { zh: "暂无记忆", en: "No memories" },
+  "memory.filteredEmpty": { zh: "当前筛选下没有记忆。", en: "No memories match the current filters." },
   "memory.searchPlaceholder": { zh: "搜索记忆", en: "Search memory" },
   "memory.autoCaptureWorkspace": { zh: "启用该工作区自动记忆", en: "Enable auto capture for this workspace" },
   "memory.contextInjectionEnabled": { zh: "启用对话记忆上下文注入", en: "Enable memory context injection for chat" },
@@ -70,6 +71,51 @@ const I18N_MAP: Record<string, { zh: string; en: string }> = {
   "memory.recordKind.conversationTurn": { zh: "整轮对话", en: "Turn" },
   "memory.recordKind.manualNote": { zh: "手动笔记", en: "Manual" },
   "memory.recordKind.legacy": { zh: "旧记录", en: "Legacy" },
+  "memory.health.complete": { zh: "完整", en: "Complete" },
+  "memory.health.all": { zh: "全部健康状态", en: "All health states" },
+  "memory.health.inputOnly": { zh: "仅用户输入", en: "Input only" },
+  "memory.health.assistantOnly": { zh: "仅 AI 回复", en: "AI only" },
+  "memory.health.pendingFusion": { zh: "等待融合", en: "Pending" },
+  "memory.health.captureFailed": { zh: "捕获失败", en: "Capture failed" },
+  "memory.review.unreviewed": { zh: "待整理", en: "Unreviewed" },
+  "memory.review.all": { zh: "全部整理状态", en: "All review states" },
+  "memory.review.kept": { zh: "已保留", en: "Kept" },
+  "memory.review.converted": { zh: "已转换", en: "Converted" },
+  "memory.review.obsolete": { zh: "已过期", en: "Obsolete" },
+  "memory.review.dismissed": { zh: "已忽略", en: "Dismissed" },
+  "memory.workbenchOverview": { zh: "项目记忆工作台概览", en: "Project memory workbench overview" },
+  "memory.workbenchTotal": { zh: "总数", en: "Total" },
+  "memory.workbenchSelected": { zh: "已选", en: "Selected" },
+  "memory.workbenchReview": { zh: "整理", en: "Review" },
+  "memory.workbenchHealth": { zh: "健康", en: "Health" },
+  "memory.memoryList": { zh: "记忆列表", en: "Memory list" },
+  "memory.memoryDetail": { zh: "记忆详情", en: "Memory detail" },
+  "memory.quickTagsMore": { zh: "+{{count}} 更多", en: "+{{count}} more" },
+  "memory.quickTagsCollapse": { zh: "收起", en: "Show less" },
+  "memory.sourceLocator": { zh: "原始对话", en: "Original turn" },
+  "memory.sourceLocatorAvailable": { zh: "thread 与 turn 可用", en: "thread and turn available" },
+  "memory.sourceLocatorUnavailable": { zh: "来源不可定位", en: "source unavailable" },
+  "memory.copySourceLocator": { zh: "复制来源", en: "Copy source" },
+  "memory.sourceLocatorCopied": { zh: "来源定位已复制。", en: "Source locator copied." },
+  "memory.reviewActions": { zh: "整理操作", en: "Review actions" },
+  "memory.reviewKeep": { zh: "保留", en: "Keep" },
+  "memory.reviewConvert": { zh: "转为手动笔记", en: "Convert to manual note" },
+  "memory.reviewObsolete": { zh: "标记过期", en: "Mark obsolete" },
+  "memory.reviewDismiss": { zh: "忽略", en: "Dismiss" },
+  "memory.reviewStateUpdated": { zh: "整理状态已更新为 {{state}}。", en: "Review state updated to {{state}}." },
+  "memory.reviewConverted": { zh: "已转为手动笔记，并标记原始对话为已转换。", en: "Converted to a manual note and marked the original turn as converted." },
+  "memory.diagnosticsTitle": { zh: "诊断与修复", en: "Diagnostics and repair" },
+  "memory.diagnosticsRun": { zh: "运行诊断", en: "Run diagnostics" },
+  "memory.diagnosticsRunning": { zh: "诊断中...", en: "Diagnosing..." },
+  "memory.diagnosticsHint": { zh: "只检查 Project Memory 存储，不扫描项目源码。", en: "Checks only Project Memory storage, not project source files." },
+  "memory.diagnosticsSummary": { zh: "诊断：总数 {{total}}，不完整 {{incomplete}}，重复 turn {{duplicates}} 组，坏文件 {{badFiles}} 个。", en: "Diagnostics: {{total}} total, {{incomplete}} incomplete, {{duplicates}} duplicate turn groups, {{badFiles}} bad files." },
+  "memory.reconcileDryRun": { zh: "Dry run", en: "Dry run" },
+  "memory.reconcileApply": { zh: "应用修复", en: "Apply repair" },
+  "memory.reconcileRunning": { zh: "处理中...", en: "Running..." },
+  "memory.reconcileDryRunDone": { zh: "Dry run 完成：可修复 {{count}} 项。", en: "Dry run completed: {{count}} fixable items." },
+  "memory.reconcileApplyDone": { zh: "修复完成：已修复 {{count}} 项。", en: "Repair completed: fixed {{count}} items." },
+  "memory.reconcileSummary": { zh: "Reconcile：可修复 {{fixable}}，已修复 {{fixed}}，跳过 {{skipped}}。", en: "Reconcile: {{fixable}} fixable, {{fixed}} fixed, {{skipped}} skipped." },
+  "memory.reconcileApplyConfirm": { zh: "确认应用可确定的安全修复吗？无法合并的冲突会被跳过。", en: "Apply deterministic safe repairs? Conflicts that cannot be merged safely will be skipped." },
 };
 
 vi.mock("react-i18next", () => ({
@@ -101,9 +147,12 @@ vi.mock("../hooks/useProjectMemory", () => ({
 
 vi.mock("../services/projectMemoryFacade", () => ({
   projectMemoryFacade: {
+    create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
     list: vi.fn(),
+    diagnostics: vi.fn(),
+    reconcile: vi.fn(),
   },
 }));
 
@@ -169,9 +218,32 @@ describe("ProjectMemoryPanel", () => {
       },
     });
     mockUseProjectMemory.mockReturnValue(buildHookState() as never);
+    mockFacade.create.mockResolvedValue(baseItem as never);
     mockFacade.update.mockResolvedValue(baseItem as never);
     mockFacade.delete.mockResolvedValue();
     mockFacade.list.mockResolvedValue({ items: [baseItem], total: 1 } as never);
+    mockFacade.diagnostics.mockResolvedValue({
+      workspaceId: "ws-1",
+      total: 2,
+      healthCounts: {
+        complete: 1,
+        input_only: 1,
+        assistant_only: 0,
+        pending_fusion: 0,
+        capture_failed: 0,
+      },
+      duplicateTurnGroups: [],
+      badFiles: [],
+    } as never);
+    mockFacade.reconcile.mockResolvedValue({
+      workspaceId: "ws-1",
+      dryRun: true,
+      fixableCount: 1,
+      fixedCount: 0,
+      skippedCount: 0,
+      duplicateGroups: 1,
+      changedMemoryIds: [],
+    } as never);
   });
 
   afterEach(() => {
@@ -438,6 +510,279 @@ describe("ProjectMemoryPanel", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
       expect.stringContaining("完整 AI 回复"),
     );
+  });
+
+  it("keeps long assistant response out of the compact list body", () => {
+    const longAssistantResponse = "AI_RESPONSE_SHOULD_ONLY_APPEAR_IN_DETAIL";
+    const turnItem = {
+      ...baseItem,
+      id: "turn-memory-compact",
+      recordKind: "conversation_turn",
+      kind: "conversation",
+      source: "conversation_turn",
+      engine: "codex",
+      threadId: "codex-thread-compact",
+      turnId: "turn-compact",
+      title: "Compact memory title",
+      summary: "Compact summary visible in list",
+      userInput: "User prompt visible in detail",
+      assistantResponse: longAssistantResponse,
+    };
+    mockUseProjectMemory.mockReturnValue(
+      buildHookState({
+        items: [turnItem],
+        selectedId: turnItem.id,
+        selectedItem: turnItem,
+      }) as never,
+    );
+
+    const view = render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    const compactList = view.container.querySelector(".project-memory-list");
+    expect(compactList?.textContent).toContain("Compact memory title");
+    expect(compactList?.textContent).toContain("Compact summary visible in list");
+    expect(compactList?.textContent).not.toContain(longAssistantResponse);
+    expect(screen.getByText(longAssistantResponse)).toBeTruthy();
+  });
+
+  it("collapses quick tags when there are too many tags", () => {
+    const itemWithManyTags = {
+      ...baseItem,
+      tags: Array.from({ length: 10 }, (_, index) => `tag-${index + 1}`),
+    };
+    mockUseProjectMemory.mockReturnValue(
+      buildHookState({
+        items: [itemWithManyTags],
+        selectedItem: itemWithManyTags,
+      }) as never,
+    );
+
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    const moreButton = screen.getByRole("button", { name: "+2 more" });
+    expect(moreButton.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(moreButton);
+
+    expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+  });
+
+  it("shows source locator availability and copies thread locator", async () => {
+    const turnItem = {
+      ...baseItem,
+      id: "turn-memory-source",
+      recordKind: "conversation_turn",
+      kind: "conversation",
+      source: "conversation_turn",
+      engine: "codex",
+      threadId: "codex-thread-source",
+      turnId: "turn-source",
+      userInput: "User prompt",
+      assistantResponse: "AI reply",
+    };
+    mockUseProjectMemory.mockReturnValue(
+      buildHookState({
+        items: [turnItem],
+        selectedId: turnItem.id,
+        selectedItem: turnItem,
+      }) as never,
+    );
+
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("thread and turn available")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy source" }));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining("threadId: codex-thread-source"),
+      );
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("turnId: turn-source"),
+    );
+  });
+
+  it("shows source locator unavailable state without thread and turn ids", () => {
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("source unavailable")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Copy source" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("filters Review Inbox and health issues in the workbench list", () => {
+    const reviewedItem = {
+      ...baseItem,
+      id: "reviewed-memory",
+      title: "Reviewed memory",
+      reviewState: "kept",
+    };
+    const issueItem = {
+      ...baseItem,
+      id: "issue-memory",
+      title: "Input only turn",
+      recordKind: "conversation_turn",
+      source: "conversation_turn",
+      kind: "conversation",
+      userInput: "用户输入",
+      assistantResponse: null,
+    };
+    mockUseProjectMemory.mockReturnValue(
+      buildHookState({
+        items: [reviewedItem, issueItem],
+        selectedId: issueItem.id,
+        selectedItem: issueItem,
+        total: 2,
+      }) as never,
+    );
+
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Reviewed memory")).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue("All review states"), {
+      target: { value: "unreviewed" },
+    });
+    const memoryList = screen.getByLabelText("Memory list");
+    expect(within(memoryList).queryByText("Reviewed memory")).toBeNull();
+    expect(within(memoryList).getByText("Input only turn")).toBeTruthy();
+
+    fireEvent.change(screen.getByDisplayValue("All health states"), {
+      target: { value: "complete" },
+    });
+    expect(screen.getByText("No memories match the current filters.")).toBeTruthy();
+  });
+
+  it("updates review state and converts conversation turns to manual notes", async () => {
+    const turnItem = {
+      ...baseItem,
+      id: "review-turn",
+      recordKind: "conversation_turn",
+      kind: "conversation",
+      source: "conversation_turn",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      userInput: "用户输入",
+      assistantResponse: "AI 回复",
+    };
+    const hookState = buildHookState({
+      items: [turnItem],
+      selectedId: turnItem.id,
+      selectedItem: turnItem,
+    });
+    mockUseProjectMemory.mockReturnValue(hookState as never);
+
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    await waitFor(() => {
+      expect(hookState.updateMemory).toHaveBeenCalledWith("review-turn", {
+        reviewState: "kept",
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Convert to manual note" }));
+    await waitFor(() => {
+      expect(mockFacade.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          recordKind: "manual_note",
+          source: "manual",
+        }),
+      );
+    });
+    expect(hookState.updateMemory).toHaveBeenCalledWith("review-turn", {
+      reviewState: "converted",
+    });
+  });
+
+  it("runs diagnostics, dry-run, and confirmed reconcile apply", async () => {
+    const hookState = buildHookState();
+    mockUseProjectMemory.mockReturnValue(hookState as never);
+    mockFacade.reconcile
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        dryRun: true,
+        fixableCount: 2,
+        fixedCount: 0,
+        skippedCount: 0,
+        duplicateGroups: 1,
+        changedMemoryIds: [],
+      } as never)
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        dryRun: false,
+        fixableCount: 2,
+        fixedCount: 2,
+        skippedCount: 0,
+        duplicateGroups: 1,
+        changedMemoryIds: ["memory-1"],
+      } as never);
+
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run diagnostics" }));
+    await waitFor(() => {
+      expect(mockFacade.diagnostics).toHaveBeenCalledWith("ws-1");
+    });
+    expect(
+      screen.getByText("Diagnostics: 2 total, 1 incomplete, 0 duplicate turn groups, 0 bad files."),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dry run" }));
+    await waitFor(() => {
+      expect(mockFacade.reconcile).toHaveBeenCalledWith("ws-1", true);
+    });
+    expect(screen.getByText("Reconcile: 2 fixable, 0 fixed, 0 skipped.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply repair" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Apply repair" }).at(-1)!);
+    await waitFor(() => {
+      expect(mockFacade.reconcile).toHaveBeenCalledWith("ws-1", false);
+    });
+    expect(hookState.refresh).toHaveBeenCalled();
   });
 
   it("keeps context injection switch disabled and unchecked", () => {
