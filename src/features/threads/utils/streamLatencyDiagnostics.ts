@@ -7,6 +7,9 @@ import type { ConversationEngine } from "../contracts/conversationCurtainContrac
 export type StreamPlatform = "windows" | "macos" | "linux" | "unknown";
 export type StreamLatencyCategory =
   | "upstream-pending"
+  | "claude-first-token-latency"
+  | "claude-stdout-without-valid-event"
+  | "claude-valid-event-without-text"
   | "render-amplification"
   | "visible-output-stall-after-first-delta"
   | "repeat-turn-blanking";
@@ -65,6 +68,7 @@ export type ThreadStreamLatencySnapshot = {
   mitigationProfile: StreamMitigationProfileId | null;
   mitigationReason: string | null;
   upstreamPendingReported: boolean;
+  firstTokenLatencyReported: boolean;
   renderAmplificationReported: boolean;
   visibleOutputStallReported: boolean;
   repeatTurnBlankingReported: boolean;
@@ -207,6 +211,7 @@ function createInitialSnapshot(threadId: string): ThreadStreamLatencySnapshot {
     mitigationProfile: null,
     mitigationReason: null,
     upstreamPendingReported: false,
+    firstTokenLatencyReported: false,
     renderAmplificationReported: false,
     visibleOutputStallReported: false,
     repeatTurnBlankingReported: false,
@@ -581,6 +586,23 @@ function normalizeTimestampMs(value: unknown) {
   return normalizeNonNegativeFiniteNumber(value) ?? Date.now();
 }
 
+function resolveClaudeFirstTokenLatencyCategory(input: {
+  firstStdoutLineAtMs: number | null;
+  firstValidStreamEventAtMs: number | null;
+  firstTextDeltaAtMs: number | null;
+}): StreamLatencyCategory | null {
+  if (input.firstTextDeltaAtMs !== null) {
+    return null;
+  }
+  if (input.firstValidStreamEventAtMs !== null) {
+    return "claude-valid-event-without-text";
+  }
+  if (input.firstStdoutLineAtMs !== null) {
+    return "claude-stdout-without-valid-event";
+  }
+  return "claude-first-token-latency";
+}
+
 function extractThreadIdFromAppServerParams(params: Record<string, unknown>) {
   return normalizeNullableString(
     normalizeString(params.threadId) ||
@@ -622,6 +644,20 @@ export function noteThreadAppServerEventReceived(input: {
   }
   const receivedAt = normalizeTimestampMs(input.receivedAt);
   const stdoutReceivedAtMs = normalizeNonNegativeFiniteNumber(timing.stdoutReceivedAtMs);
+  const processSpawnStartedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.processSpawnStartedAtMs,
+  );
+  const processSpawnedAtMs = normalizeNonNegativeFiniteNumber(timing.processSpawnedAtMs);
+  const stdinWriteStartedAtMs = normalizeNonNegativeFiniteNumber(
+    timing.stdinWriteStartedAtMs,
+  );
+  const stdinClosedAtMs = normalizeNonNegativeFiniteNumber(timing.stdinClosedAtMs);
+  const turnStartedAtMs = normalizeNonNegativeFiniteNumber(timing.turnStartedAtMs);
+  const firstStdoutLineAtMs = normalizeNonNegativeFiniteNumber(timing.firstStdoutLineAtMs);
+  const firstValidStreamEventAtMs = normalizeNonNegativeFiniteNumber(
+    timing.firstValidStreamEventAtMs,
+  );
+  const firstTextDeltaAtMs = normalizeNonNegativeFiniteNumber(timing.firstTextDeltaAtMs);
   const sessionEmittedAtMs = normalizeNonNegativeFiniteNumber(timing.sessionEmittedAtMs);
   const forwarderReceivedAtMs = normalizeNonNegativeFiniteNumber(timing.forwarderReceivedAtMs);
   const appServerEmittedAtMs = normalizeNonNegativeFiniteNumber(timing.appServerEmittedAtMs);
@@ -639,10 +675,31 @@ export function noteThreadAppServerEventReceived(input: {
       deltaLength: normalizeString(params.delta).length,
       traceSource: normalizeString(timing.source) || "unknown",
       stdoutReceivedAtMs,
+      processSpawnStartedAtMs,
+      processSpawnedAtMs,
+      stdinWriteStartedAtMs,
+      stdinClosedAtMs,
+      turnStartedAtMs,
+      firstStdoutLineAtMs,
+      firstValidStreamEventAtMs,
+      firstTextDeltaAtMs,
       sessionEmittedAtMs,
       forwarderReceivedAtMs,
       appServerEmittedAtMs,
       rendererReceivedAtMs: receivedAt,
+      spawnToStdinClosedMs: normalizeNonNegativeFiniteNumber(timing.spawnToStdinClosedMs),
+      stdinClosedToFirstStdoutMs: normalizeNonNegativeFiniteNumber(
+        timing.stdinClosedToFirstStdoutMs,
+      ),
+      firstStdoutToFirstValidEventMs: normalizeNonNegativeFiniteNumber(
+        timing.firstStdoutToFirstValidEventMs,
+      ),
+      firstValidEventToFirstTextDeltaMs: normalizeNonNegativeFiniteNumber(
+        timing.firstValidEventToFirstTextDeltaMs,
+      ),
+      stdinClosedToFirstTextDeltaMs: normalizeNonNegativeFiniteNumber(
+        timing.stdinClosedToFirstTextDeltaMs,
+      ),
       stdoutToSessionEmitMs: normalizeNonNegativeFiniteNumber(timing.stdoutToSessionEmitMs),
       sessionEmitToForwarderMs: normalizeNonNegativeFiniteNumber(
         timing.sessionEmitToForwarderMs,
@@ -657,6 +714,51 @@ export function noteThreadAppServerEventReceived(input: {
       stdoutToRendererMs: nonNegativeGapMs(receivedAt, stdoutReceivedAtMs),
     }),
   );
+
+  const firstTokenCategory = resolveClaudeFirstTokenLatencyCategory({
+    firstStdoutLineAtMs,
+    firstValidStreamEventAtMs,
+    firstTextDeltaAtMs,
+  });
+  if (normalizeString(timing.source) !== "claude-stream" || firstTokenCategory === null) {
+    return;
+  }
+  updateThreadSnapshot(threadId, (current) => {
+    const nextSnapshot: ThreadStreamLatencySnapshot = {
+      ...current,
+      workspaceId: current.workspaceId ?? input.workspaceId,
+      platform: current.platform === "unknown" ? resolvePlatform() : current.platform,
+      latencyCategory: current.latencyCategory ?? firstTokenCategory,
+      firstTokenLatencyReported: true,
+    };
+    if (!current.firstTokenLatencyReported) {
+      appendRendererDiagnostic(
+        "stream-latency/claude-first-token-phase",
+        buildCorrelationPayload(nextSnapshot, {
+          method: input.method,
+          itemId: extractItemIdFromAppServerParams(params),
+          latencyCategory: firstTokenCategory,
+          processSpawnStartedAtMs,
+          processSpawnedAtMs,
+          stdinClosedAtMs,
+          firstStdoutLineAtMs,
+          firstValidStreamEventAtMs,
+          firstTextDeltaAtMs,
+          spawnToStdinClosedMs: normalizeNonNegativeFiniteNumber(timing.spawnToStdinClosedMs),
+          stdinClosedToFirstStdoutMs: normalizeNonNegativeFiniteNumber(
+            timing.stdinClosedToFirstStdoutMs,
+          ),
+          firstStdoutToFirstValidEventMs: normalizeNonNegativeFiniteNumber(
+            timing.firstStdoutToFirstValidEventMs,
+          ),
+          firstValidEventToFirstTextDeltaMs: normalizeNonNegativeFiniteNumber(
+            timing.firstValidEventToFirstTextDeltaMs,
+          ),
+        }),
+      );
+    }
+    return nextSnapshot;
+  });
 }
 
 export function buildThreadStreamCorrelationDimensions(threadId: string | null) {
@@ -803,6 +905,7 @@ export function noteThreadTurnStarted(input: {
     mitigationProfile: null,
     mitigationReason: null,
     upstreamPendingReported: false,
+    firstTokenLatencyReported: false,
     renderAmplificationReported: false,
     visibleOutputStallReported: false,
     repeatTurnBlankingReported: false,
@@ -1236,6 +1339,7 @@ export function completeThreadStreamTurn(threadId: string) {
     mitigationProfile: null,
     mitigationReason: null,
     upstreamPendingReported: false,
+    firstTokenLatencyReported: false,
     renderAmplificationReported: false,
     visibleOutputStallReported: false,
     repeatTurnBlankingReported: false,

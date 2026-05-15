@@ -207,6 +207,14 @@ async fn claude_forwarder_attaches_redacted_stream_timing_to_realtime_delta() {
         },
         Some(&ClaudeStreamTiming {
             stdout_received_at_ms: Some(1_000),
+            process_spawn_started_at_ms: Some(900),
+            process_spawned_at_ms: Some(910),
+            stdin_write_started_at_ms: Some(915),
+            stdin_closed_at_ms: Some(930),
+            turn_started_at_ms: Some(940),
+            first_stdout_line_at_ms: Some(1_000),
+            first_valid_stream_event_at_ms: Some(1_005),
+            first_text_delta_at_ms: Some(1_010),
             session_emitted_at_ms: 1_020,
         }),
         &mut state,
@@ -221,7 +229,20 @@ async fn claude_forwarder_attaches_redacted_stream_timing_to_realtime_delta() {
         .expect("stream timing metadata");
     assert_eq!(timing["source"], "claude-stream");
     assert_eq!(timing["stdoutReceivedAtMs"], 1_000);
+    assert_eq!(timing["processSpawnStartedAtMs"], 900);
+    assert_eq!(timing["processSpawnedAtMs"], 910);
+    assert_eq!(timing["stdinWriteStartedAtMs"], 915);
+    assert_eq!(timing["stdinClosedAtMs"], 930);
+    assert_eq!(timing["turnStartedAtMs"], 940);
+    assert_eq!(timing["firstStdoutLineAtMs"], 1_000);
+    assert_eq!(timing["firstValidStreamEventAtMs"], 1_005);
+    assert_eq!(timing["firstTextDeltaAtMs"], 1_010);
     assert_eq!(timing["sessionEmittedAtMs"], 1_020);
+    assert_eq!(timing["spawnToStdinClosedMs"], 30);
+    assert_eq!(timing["stdinClosedToFirstStdoutMs"], 70);
+    assert_eq!(timing["firstStdoutToFirstValidEventMs"], 5);
+    assert_eq!(timing["firstValidEventToFirstTextDeltaMs"], 5);
+    assert_eq!(timing["stdinClosedToFirstTextDeltaMs"], 80);
     assert_eq!(timing["stdoutToSessionEmitMs"], 20);
     assert!(timing.get("text").is_none());
     assert!(timing.get("delta").is_none());

@@ -422,6 +422,22 @@ async fn send_message_batches_windows_text_deltas_without_delaying_other_platfor
             _ => None,
         })
         .collect();
+    let first_text_timing = events
+        .iter()
+        .find_map(|event| {
+            matches!(&event.event, EngineEvent::TextDelta { .. })
+                .then(|| event.stream_timing.as_ref())
+                .flatten()
+        })
+        .expect("first text delta should include stream startup timing");
+    assert!(first_text_timing.process_spawn_started_at_ms.is_some());
+    assert!(first_text_timing.process_spawned_at_ms.is_some());
+    assert!(first_text_timing.stdin_closed_at_ms.is_some());
+    assert!(first_text_timing.turn_started_at_ms.is_some());
+    assert!(first_text_timing.first_stdout_line_at_ms.is_some());
+    assert!(first_text_timing.first_valid_stream_event_at_ms.is_some());
+    assert!(first_text_timing.first_text_delta_at_ms.is_some());
+    assert!(first_text_timing.session_emitted_at_ms > 0);
     let reasoning_index = events
         .iter()
         .position(|event| matches!(&event.event, EngineEvent::ReasoningDelta { .. }))

@@ -64,7 +64,48 @@ pub struct ClaudeTurnEvent {
 #[derive(Debug, Clone)]
 pub(crate) struct ClaudeStreamTiming {
     pub(crate) stdout_received_at_ms: Option<u64>,
+    pub(crate) process_spawn_started_at_ms: Option<u64>,
+    pub(crate) process_spawned_at_ms: Option<u64>,
+    pub(crate) stdin_write_started_at_ms: Option<u64>,
+    pub(crate) stdin_closed_at_ms: Option<u64>,
+    pub(crate) turn_started_at_ms: Option<u64>,
+    pub(crate) first_stdout_line_at_ms: Option<u64>,
+    pub(crate) first_valid_stream_event_at_ms: Option<u64>,
+    pub(crate) first_text_delta_at_ms: Option<u64>,
     pub(crate) session_emitted_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ClaudeStreamStartupTiming {
+    process_spawn_started_at_ms: Option<u64>,
+    process_spawned_at_ms: Option<u64>,
+    stdin_write_started_at_ms: Option<u64>,
+    stdin_closed_at_ms: Option<u64>,
+    turn_started_at_ms: Option<u64>,
+    first_stdout_line_at_ms: Option<u64>,
+    first_valid_stream_event_at_ms: Option<u64>,
+    first_text_delta_at_ms: Option<u64>,
+}
+
+impl ClaudeStreamStartupTiming {
+    fn to_stream_timing(
+        &self,
+        stdout_received_at_ms: Option<u64>,
+        session_emitted_at_ms: u64,
+    ) -> ClaudeStreamTiming {
+        ClaudeStreamTiming {
+            stdout_received_at_ms,
+            process_spawn_started_at_ms: self.process_spawn_started_at_ms,
+            process_spawned_at_ms: self.process_spawned_at_ms,
+            stdin_write_started_at_ms: self.stdin_write_started_at_ms,
+            stdin_closed_at_ms: self.stdin_closed_at_ms,
+            turn_started_at_ms: self.turn_started_at_ms,
+            first_stdout_line_at_ms: self.first_stdout_line_at_ms,
+            first_valid_stream_event_at_ms: self.first_valid_stream_event_at_ms,
+            first_text_delta_at_ms: self.first_text_delta_at_ms,
+            session_emitted_at_ms,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +137,7 @@ struct BufferedClaudeTextDelta {
     text: String,
     started_at: Option<Instant>,
     first_stdout_received_at_ms: Option<u64>,
+    stream_startup_timing: Option<ClaudeStreamStartupTiming>,
 }
 
 impl BufferedClaudeTextDelta {
@@ -115,6 +157,12 @@ impl BufferedClaudeTextDelta {
             self.first_stdout_received_at_ms = stdout_received_at_ms;
         }
         self.text.push_str(delta);
+    }
+
+    fn set_stream_startup_timing(&mut self, timing: &ClaudeStreamStartupTiming) {
+        if self.stream_startup_timing.is_none() {
+            self.stream_startup_timing = Some(timing.clone());
+        }
     }
 
     fn is_empty(&self) -> bool {
@@ -147,6 +195,7 @@ impl BufferedClaudeTextDelta {
         Some(BufferedClaudeTextDeltaEmission {
             text: std::mem::take(&mut self.text),
             stdout_received_at_ms: self.first_stdout_received_at_ms.take(),
+            stream_startup_timing: self.stream_startup_timing.take(),
         })
     }
 }
@@ -155,6 +204,7 @@ impl BufferedClaudeTextDelta {
 struct BufferedClaudeTextDeltaEmission {
     text: String,
     stdout_received_at_ms: Option<u64>,
+    stream_startup_timing: Option<ClaudeStreamStartupTiming>,
 }
 
 fn unix_timestamp_ms() -> u64 {
@@ -500,10 +550,12 @@ impl ClaudeSession {
                 workspace_id: self.workspace_id.clone(),
                 text: emission.text,
             },
-            Some(ClaudeStreamTiming {
-                stdout_received_at_ms: emission.stdout_received_at_ms,
-                session_emitted_at_ms: unix_timestamp_ms(),
-            }),
+            Some(
+                emission
+                    .stream_startup_timing
+                    .unwrap_or_default()
+                    .to_stream_timing(emission.stdout_received_at_ms, unix_timestamp_ms()),
+            ),
         );
     }
 
@@ -763,6 +815,10 @@ impl ClaudeSession {
         Self::configure_spawn_command(&mut cmd);
 
         // Spawn the process
+        let mut stream_startup_timing = ClaudeStreamStartupTiming {
+            process_spawn_started_at_ms: Some(unix_timestamp_ms()),
+            ..ClaudeStreamStartupTiming::default()
+        };
         let mut child = match cmd.spawn() {
             Ok(child) => child,
             Err(e) => {
@@ -779,11 +835,13 @@ impl ClaudeSession {
                 return Err(error_msg);
             }
         };
+        stream_startup_timing.process_spawned_at_ms = Some(unix_timestamp_ms());
 
         // If stream-json input is enabled, write the message content to stdin.
         // This path is required for image payloads and multiline text prompts.
         if use_stream_json_input {
             if let Some(mut stdin) = child.stdin.take() {
+                stream_startup_timing.stdin_write_started_at_ms = Some(unix_timestamp_ms());
                 let message = match build_message_content(&params) {
                     Ok(value) => value,
                     Err(error) => {
@@ -833,6 +891,7 @@ impl ClaudeSession {
                 }
                 // Drop stdin to signal EOF
                 drop(stdin);
+                stream_startup_timing.stdin_closed_at_ms = Some(unix_timestamp_ms());
             } else {
                 return self
                     .fail_send_setup_and_terminate_child(
@@ -846,6 +905,7 @@ impl ClaudeSession {
             // For non-image messages, drop stdin immediately so the CLI
             // doesn't hang waiting for EOF.
             drop(child.stdin.take());
+            stream_startup_timing.stdin_closed_at_ms = Some(unix_timestamp_ms());
         }
 
         let stdout = match child.stdout.take() {
@@ -913,6 +973,7 @@ impl ClaudeSession {
         );
 
         // Emit turn started event
+        stream_startup_timing.turn_started_at_ms = Some(unix_timestamp_ms());
         self.emit_turn_event(
             turn_id,
             EngineEvent::TurnStarted {
@@ -1037,10 +1098,20 @@ impl ClaudeSession {
                 continue;
             }
             let line_received_at_ms = unix_timestamp_ms();
+            if stream_startup_timing.first_stdout_line_at_ms.is_none() {
+                stream_startup_timing.first_stdout_line_at_ms = Some(line_received_at_ms);
+            }
 
             match parse_claude_stream_json_line(&line) {
                 Ok(event) => {
                     if Self::is_valid_claude_stream_event(&event) {
+                        if stream_startup_timing
+                            .first_valid_stream_event_at_ms
+                            .is_none()
+                        {
+                            stream_startup_timing.first_valid_stream_event_at_ms =
+                                Some(line_received_at_ms);
+                        }
                         saw_valid_stream_event = true;
                     } else if !saw_valid_stream_event {
                         if let Ok(mut sample) = stream_diagnostic_sample.lock() {
@@ -1056,9 +1127,15 @@ impl ClaudeSession {
                                 if let Some(text) = extract_result_text(&event) {
                                     if !text.trim().is_empty() {
                                         saw_text_delta = true;
+                                        if stream_startup_timing.first_text_delta_at_ms.is_none() {
+                                            stream_startup_timing.first_text_delta_at_ms =
+                                                Some(line_received_at_ms);
+                                        }
                                         response_text.push_str(&text);
                                         pending_text_delta
                                             .push_with_timing(&text, Some(line_received_at_ms));
+                                        pending_text_delta
+                                            .set_stream_startup_timing(&stream_startup_timing);
                                     }
                                 }
                             }
@@ -1106,7 +1183,12 @@ impl ClaudeSession {
                         if let EngineEvent::TextDelta { ref text, .. } = unified_event {
                             response_text.push_str(text);
                             saw_text_delta = true;
+                            if stream_startup_timing.first_text_delta_at_ms.is_none() {
+                                stream_startup_timing.first_text_delta_at_ms =
+                                    Some(line_received_at_ms);
+                            }
                             pending_text_delta.push_with_timing(text, Some(line_received_at_ms));
+                            pending_text_delta.set_stream_startup_timing(&stream_startup_timing);
                             continue;
                         }
 
@@ -1114,7 +1196,16 @@ impl ClaudeSession {
                         let is_user_input_request =
                             matches!(&unified_event, EngineEvent::RequestUserInput { .. });
 
-                        self.emit_turn_event(turn_id, unified_event);
+                        self.emit_turn_event_with_stream_timing(
+                            turn_id,
+                            unified_event,
+                            Some(
+                                stream_startup_timing.to_stream_timing(
+                                    Some(line_received_at_ms),
+                                    unix_timestamp_ms(),
+                                ),
+                            ),
+                        );
 
                         if self.has_pending_approval_request_for_turn(turn_id) {
                             match self

@@ -195,9 +195,45 @@ fn attach_claude_stream_timing(
         json!({
             "source": "claude-stream",
             "stdoutReceivedAtMs": stream_timing.stdout_received_at_ms,
+            "processSpawnStartedAtMs": stream_timing.process_spawn_started_at_ms,
+            "processSpawnedAtMs": stream_timing.process_spawned_at_ms,
+            "stdinWriteStartedAtMs": stream_timing.stdin_write_started_at_ms,
+            "stdinClosedAtMs": stream_timing.stdin_closed_at_ms,
+            "turnStartedAtMs": stream_timing.turn_started_at_ms,
+            "firstStdoutLineAtMs": stream_timing.first_stdout_line_at_ms,
+            "firstValidStreamEventAtMs": stream_timing.first_valid_stream_event_at_ms,
+            "firstTextDeltaAtMs": stream_timing.first_text_delta_at_ms,
             "sessionEmittedAtMs": stream_timing.session_emitted_at_ms,
             "forwarderReceivedAtMs": forwarder_received_at_ms,
             "appServerEmittedAtMs": app_server_emitted_at_ms,
+            "spawnToStdinClosedMs": saturating_gap_ms(
+                stream_timing.stdin_closed_at_ms.unwrap_or(stream_timing.session_emitted_at_ms),
+                stream_timing.process_spawn_started_at_ms,
+            ),
+            "stdinClosedToFirstStdoutMs": stream_timing.first_stdout_line_at_ms.and_then(
+                |first_stdout_line_at_ms| saturating_gap_ms(
+                    first_stdout_line_at_ms,
+                    stream_timing.stdin_closed_at_ms,
+                ),
+            ),
+            "firstStdoutToFirstValidEventMs": stream_timing.first_valid_stream_event_at_ms.and_then(
+                |first_valid_stream_event_at_ms| saturating_gap_ms(
+                    first_valid_stream_event_at_ms,
+                    stream_timing.first_stdout_line_at_ms,
+                ),
+            ),
+            "firstValidEventToFirstTextDeltaMs": stream_timing.first_text_delta_at_ms.and_then(
+                |first_text_delta_at_ms| saturating_gap_ms(
+                    first_text_delta_at_ms,
+                    stream_timing.first_valid_stream_event_at_ms,
+                ),
+            ),
+            "stdinClosedToFirstTextDeltaMs": stream_timing.first_text_delta_at_ms.and_then(
+                |first_text_delta_at_ms| saturating_gap_ms(
+                    first_text_delta_at_ms,
+                    stream_timing.stdin_closed_at_ms,
+                ),
+            ),
             "stdoutToSessionEmitMs": saturating_gap_ms(
                 stream_timing.session_emitted_at_ms,
                 stream_timing.stdout_received_at_ms,
