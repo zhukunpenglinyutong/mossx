@@ -1,7 +1,9 @@
 # composer-rewind-modal-style-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-composer-rewind-modal-styles. Update Purpose after archive.
+
+Defines the composer-rewind-modal-style-compatibility behavior contract, covering Composer Rewind Modal Style Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Composer Rewind Modal Style Extraction Compatibility
 The system SHALL preserve the effective rewind modal selector contract and user-visible styling when `claude-rewind-modal-*` styles are moved out of `composer.part1.css` into a dedicated shard file.

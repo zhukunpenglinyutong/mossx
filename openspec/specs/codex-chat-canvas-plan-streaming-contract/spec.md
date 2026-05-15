@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change codex-plan-official-parity-2026-03-03. Update Purpose after archive.
+Defines the codex-chat-canvas-plan-streaming-contract behavior contract, covering Plan Stream Event Mapping.
 
 ## Requirements
 

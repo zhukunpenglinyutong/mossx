@@ -1,7 +1,9 @@
 # large-file-modularization-governance Specification
 
 ## Purpose
-TBD - created by archiving change bridge-cleanup-and-large-file-modularization. Update Purpose after archive.
+
+Defines the large-file-modularization-governance behavior contract, covering Oversized File Detection Baseline.
+
 ## Requirements
 ### Requirement: Oversized File Detection Baseline
 The system SHALL maintain version-traceable baseline artifacts for large-file governance, including a human-readable report and a machine-readable debt ledger keyed by the matched governance policy.

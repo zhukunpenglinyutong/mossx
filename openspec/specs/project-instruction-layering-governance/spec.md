@@ -1,7 +1,9 @@
 # project-instruction-layering-governance Specification
 
 ## Purpose
-TBD - created by archiving change streamline-governance-doc-stack. Update Purpose after archive.
+
+Defines the project-instruction-layering-governance behavior contract, covering Project Instruction Stack MUST Have Explicit Layer Ownership.
+
 ## Requirements
 ### Requirement: Project Instruction Stack MUST Have Explicit Layer Ownership
 
@@ -51,3 +53,18 @@ Host adapter session-start hooks SHALL inject only the minimum repository contex
 - **THEN** the injected context SHALL point to `.trellis/spec/frontend/index.md`, `.trellis/spec/backend/index.md`, `.trellis/spec/guides/index.md`, and the relevant OpenSpec entry documents as read-on-demand surfaces
 - **AND** it SHALL NOT inline the full正文 of multiple spec index files as the default session-start payload
 
+### Requirement: OpenSpec Main Specs MUST Preserve Human-Readable Hygiene
+
+The repository SHALL keep main OpenSpec specs readable and inventory-safe after archive or sync operations.
+
+#### Scenario: Archived specs have meaningful Purpose text
+
+- **WHEN** a change is synced or archived into `openspec/specs/**`
+- **THEN** each resulting main `spec.md` file SHALL contain a meaningful `## Purpose` section
+- **AND** the Purpose section SHALL NOT keep archive-generated `TBD` placeholder text
+
+#### Scenario: Capability inventory excludes empty directories
+
+- **WHEN** collaborators inspect first-level directories under `openspec/specs/`
+- **THEN** each capability directory SHALL contain a real `spec.md` with at least one requirement
+- **AND** empty capability directories SHALL be removed instead of being treated as mainline capabilities

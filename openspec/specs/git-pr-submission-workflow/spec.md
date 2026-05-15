@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change git-panel-create-pr-button. Update Purpose after archive.
+Defines the git-pr-submission-workflow behavior contract, covering Structured GitHub PR Workflow.
 
 ## Requirements
 

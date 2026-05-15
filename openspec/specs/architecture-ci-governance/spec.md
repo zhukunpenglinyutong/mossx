@@ -1,7 +1,9 @@
 # architecture-ci-governance Specification
 
 ## Purpose
-TBD - created by archiving change phase1-architecture-hardening. Update Purpose after archive.
+
+Defines the architecture-ci-governance behavior contract, covering Architecture Hardening Batches MUST Declare Validation Gates Up Front.
+
 ## Requirements
 ### Requirement: Architecture Hardening Batches MUST Declare Validation Gates Up Front
 第一阶段架构收敛批次 MUST 在实现前声明适用的质量门禁与 focused validation，而不是在实现后补跑模糊回归。

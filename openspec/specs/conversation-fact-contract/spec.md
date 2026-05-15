@@ -1,7 +1,9 @@
 # conversation-fact-contract Specification
 
 ## Purpose
-TBD - created by archiving change converge-conversation-fact-contract. Update Purpose after archive.
+
+Defines the conversation-fact-contract behavior contract, covering Conversation Surface MUST Consume Classified Conversation Facts.
+
 ## Requirements
 ### Requirement: Conversation Surface MUST Consume Classified Conversation Facts
 

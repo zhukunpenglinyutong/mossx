@@ -1,7 +1,9 @@
 # workspace-note-card-storage Specification
 
 ## Purpose
-TBD - created by archiving change add-workspace-note-card-pool. Update Purpose after archive.
+
+Defines the workspace-note-card-storage behavior contract, covering Note Cards MUST Be Stored Under Project-Scoped Local Folders.
+
 ## Requirements
 ### Requirement: Note Cards MUST Be Stored Under Project-Scoped Local Folders
 

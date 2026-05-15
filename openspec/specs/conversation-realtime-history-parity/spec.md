@@ -1,7 +1,9 @@
 # conversation-realtime-history-parity Specification
 
 ## Purpose
-TBD - created by archiving change converge-conversation-fact-contract. Update Purpose after archive.
+
+Defines the conversation-realtime-history-parity behavior contract, covering Realtime And History Paths MUST Preserve Visible Transcript Parity.
+
 ## Requirements
 ### Requirement: Realtime And History Paths MUST Preserve Visible Transcript Parity
 

@@ -1,7 +1,9 @@
 # feishu-message-connector Specification
 
 ## Purpose
-TBD - created by archiving change add-third-party-message-ingestion-feishu-2026-03-08. Update Purpose after archive.
+
+Defines the feishu-message-connector behavior contract, covering Feishu Connector SHALL Support App Credential Based Setup.
+
 ## Requirements
 ### Requirement: Feishu Connector SHALL Support App Credential Based Setup
 

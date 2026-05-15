@@ -1,7 +1,9 @@
 # runtime-session-lifecycle-extraction-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-runtime-session-lifecycle. Update Purpose after archive.
+
+Defines the runtime-session-lifecycle-extraction-compatibility behavior contract, covering Runtime Session Lifecycle Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Runtime Session Lifecycle Extraction Compatibility
 The system SHALL preserve the effective workspace session lifecycle behavior and outward runtime helper surface when lifecycle helpers are moved out of `runtime/mod.rs` into a dedicated submodule.

@@ -1,7 +1,9 @@
 # claude-reasoning-effort-support Specification
 
 ## Purpose
-TBD - created by archiving change add-claude-reasoning-effort-support. Update Purpose after archive.
+
+Defines the claude-reasoning-effort-support behavior contract, covering Claude Provider MUST Expose Reasoning Effort Selector.
+
 ## Requirements
 ### Requirement: Claude Provider MUST Expose Reasoning Effort Selector
 

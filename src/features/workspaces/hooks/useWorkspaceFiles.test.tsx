@@ -350,4 +350,54 @@ describe("useWorkspaceFiles", () => {
 
     unmount();
   });
+
+  it("normalizes progressive scan metadata and clears it on workspace switch", async () => {
+    const getWorkspaceFilesMock = vi.mocked(getWorkspaceFiles);
+    getWorkspaceFilesMock.mockResolvedValue({
+      files: [],
+      directories: ["packages/large"],
+      gitignored_files: [],
+      gitignored_directories: [],
+      scan_state: "partial",
+      limit_hit: true,
+      directory_entries: [
+        {
+          path: "packages/large",
+          child_state: "unknown",
+          has_more: true,
+        },
+      ],
+    });
+
+    const { rerender, result, unmount } = renderHook(
+      ({ activeWorkspace }: { activeWorkspace: WorkspaceInfo | null }) =>
+        useWorkspaceFiles({
+          activeWorkspace,
+          pollingEnabled: false,
+        }),
+      {
+        initialProps: { activeWorkspace: workspaceA },
+      },
+    );
+
+    await flushAsyncWork();
+
+    expect(result.current.scanState).toBe("partial");
+    expect(result.current.limitHit).toBe(true);
+    expect(result.current.directoryMetadata).toEqual([
+      {
+        path: "packages/large",
+        child_state: "unknown",
+        has_more: true,
+      },
+    ]);
+
+    rerender({ activeWorkspace: workspaceB });
+
+    expect(result.current.scanState).toBe("complete");
+    expect(result.current.limitHit).toBe(false);
+    expect(result.current.directoryMetadata).toEqual([]);
+
+    unmount();
+  });
 });

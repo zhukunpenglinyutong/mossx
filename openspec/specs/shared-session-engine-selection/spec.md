@@ -1,7 +1,9 @@
 # shared-session-engine-selection Specification
 
 ## Purpose
-TBD - created by archiving change add-shared-session-thread. Update Purpose after archive.
+
+Defines the shared-session-engine-selection behavior contract, covering Shared Session Uses Explicit Manual Engine Selection.
+
 ## Requirements
 ### Requirement: Shared Session Uses Explicit Manual Engine Selection
 

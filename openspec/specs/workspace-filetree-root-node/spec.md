@@ -1,7 +1,9 @@
 # workspace-filetree-root-node Specification
 
 ## Purpose
-TBD - created by archiving change workspace-filetree-root-node. Update Purpose after archive.
+
+Defines the workspace-filetree-root-node behavior contract, covering File Tree SHALL Expose A Single Workspace Root Node.
+
 ## Requirements
 ### Requirement: File Tree SHALL Expose A Single Workspace Root Node
 The system SHALL render exactly one workspace root node at the top of the right-side file tree and place all current top-level entries under that root.

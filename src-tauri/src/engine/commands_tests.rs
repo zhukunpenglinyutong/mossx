@@ -1,3 +1,4 @@
+use super::super::claude::ClaudeStreamTiming;
 use super::claude_forwarder::{
     handle_claude_forwarder_event, ClaudeForwarderFuture, ClaudeForwarderRuntimeOps,
     ClaudeForwarderState, CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS,
@@ -107,6 +108,7 @@ async fn claude_forwarder_queues_turn_start_sync_after_emitting_turn_started() {
             workspace_id: "ws-1".to_string(),
             turn_id: "turn-1".to_string(),
         },
+        None,
         &mut state,
         &runtime_ops,
         &mut |event| {
@@ -155,6 +157,7 @@ async fn claude_forwarder_emits_realtime_deltas_before_runtime_sync() {
             workspace_id: "ws-1".to_string(),
             text: "hello".to_string(),
         },
+        None,
         &mut state,
         &runtime_ops,
         &mut |event| {
@@ -184,6 +187,65 @@ async fn claude_forwarder_emits_realtime_deltas_before_runtime_sync() {
             < call_index(&calls, "sync-queued:stream-heartbeat"),
         "text delta must be visible before runtime sync is queued: {calls:?}",
     );
+}
+
+#[tokio::test]
+async fn claude_forwarder_attaches_redacted_stream_timing_to_realtime_delta() {
+    let runtime_ops = FakeClaudeRuntimeOps::default();
+    let mut state = ClaudeForwarderState::new(
+        "thread-1".to_string(),
+        "assistant-1".to_string(),
+        "reasoning-1".to_string(),
+        "turn-1".to_string(),
+    );
+    let mut emitted = Vec::<AppServerEvent>::new();
+
+    handle_claude_forwarder_event(
+        EngineEvent::TextDelta {
+            workspace_id: "ws-1".to_string(),
+            text: "hello".to_string(),
+        },
+        Some(&ClaudeStreamTiming {
+            stdout_received_at_ms: Some(1_000),
+            process_spawn_started_at_ms: Some(900),
+            process_spawned_at_ms: Some(910),
+            stdin_write_started_at_ms: Some(915),
+            stdin_closed_at_ms: Some(930),
+            turn_started_at_ms: Some(940),
+            first_stdout_line_at_ms: Some(1_000),
+            first_valid_stream_event_at_ms: Some(1_005),
+            first_text_delta_at_ms: Some(1_010),
+            session_emitted_at_ms: 1_020,
+        }),
+        &mut state,
+        &runtime_ops,
+        &mut |event| emitted.push(event),
+    )
+    .await;
+
+    let timing = emitted
+        .first()
+        .and_then(|event| event.message.pointer("/params/ccguiTiming"))
+        .expect("stream timing metadata");
+    assert_eq!(timing["source"], "claude-stream");
+    assert_eq!(timing["stdoutReceivedAtMs"], 1_000);
+    assert_eq!(timing["processSpawnStartedAtMs"], 900);
+    assert_eq!(timing["processSpawnedAtMs"], 910);
+    assert_eq!(timing["stdinWriteStartedAtMs"], 915);
+    assert_eq!(timing["stdinClosedAtMs"], 930);
+    assert_eq!(timing["turnStartedAtMs"], 940);
+    assert_eq!(timing["firstStdoutLineAtMs"], 1_000);
+    assert_eq!(timing["firstValidStreamEventAtMs"], 1_005);
+    assert_eq!(timing["firstTextDeltaAtMs"], 1_010);
+    assert_eq!(timing["sessionEmittedAtMs"], 1_020);
+    assert_eq!(timing["spawnToStdinClosedMs"], 30);
+    assert_eq!(timing["stdinClosedToFirstStdoutMs"], 70);
+    assert_eq!(timing["firstStdoutToFirstValidEventMs"], 5);
+    assert_eq!(timing["firstValidEventToFirstTextDeltaMs"], 5);
+    assert_eq!(timing["stdinClosedToFirstTextDeltaMs"], 80);
+    assert_eq!(timing["stdoutToSessionEmitMs"], 20);
+    assert!(timing.get("text").is_none());
+    assert!(timing.get("delta").is_none());
 }
 
 #[tokio::test]
@@ -218,7 +280,7 @@ async fn claude_forwarder_uses_same_low_latency_path_for_reasoning_and_tool_delt
         let mut emitted = Vec::<AppServerEvent>::new();
 
         let finished =
-            handle_claude_forwarder_event(event, &mut state, &runtime_ops, &mut |event| {
+            handle_claude_forwarder_event(event, None, &mut state, &runtime_ops, &mut |event| {
                 runtime_ops.push_call(
                     event
                         .message
@@ -264,6 +326,7 @@ async fn claude_forwarder_captures_burst_gap_and_preserves_streamed_final_text()
             workspace_id: "ws-1".to_string(),
             text: "streamed ".to_string(),
         },
+        None,
         &mut state,
         &runtime_ops,
         &mut |event| emitted.push(event),
@@ -274,6 +337,7 @@ async fn claude_forwarder_captures_burst_gap_and_preserves_streamed_final_text()
             workspace_id: "ws-1".to_string(),
             text: "answer".to_string(),
         },
+        None,
         &mut state,
         &runtime_ops,
         &mut |event| emitted.push(event),
@@ -284,6 +348,7 @@ async fn claude_forwarder_captures_burst_gap_and_preserves_streamed_final_text()
             workspace_id: "ws-1".to_string(),
             result: Some(json!({ "text": "fallback final" })),
         },
+        None,
         &mut state,
         &runtime_ops,
         &mut |event| emitted.push(event),

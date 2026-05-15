@@ -1,7 +1,9 @@
 # codex-context-auto-compaction Specification
 
 ## Purpose
-TBD - created by archiving change codex-context-auto-compaction-runtime. Update Purpose after archive.
+
+Defines the codex-context-auto-compaction behavior contract, covering Codex Auto Compaction Trigger.
+
 ## Requirements
 ### Requirement: Codex Auto Compaction Trigger
 The system MUST automatically trigger context compaction for Codex threads when context usage reaches the configured high-watermark.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change opencode-session-hard-delete. Update Purpose after archive.
+Defines the opencode-session-deletion behavior contract, covering OpenCode 会话必须支持后端 hard delete.
 
 ## Requirements
 

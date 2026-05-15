@@ -1,7 +1,9 @@
 # threads-exhaustive-deps-stability Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-threads-exhaustive-deps-hotspot. Update Purpose after archive.
+
+Defines the threads-exhaustive-deps-stability behavior contract, covering Threads hook dependencies remain complete after remediation.
+
 ## Requirements
 ### Requirement: Threads hook dependencies remain complete after remediation
 The system SHALL allow `threads` domain hooks to include all referenced dependencies in callbacks and effects without changing send, resume, or event-handling behavior.

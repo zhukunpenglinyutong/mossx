@@ -1,7 +1,9 @@
 # context-ledger-surface Specification
 
 ## Purpose
-TBD - created by archiving change add-context-ledger. Update Purpose after archive.
+
+Defines the context-ledger-surface behavior contract, covering Context Ledger SHALL Expose A Dedicated Effective Context Surface.
+
 ## Requirements
 ### Requirement: Context Ledger SHALL Expose A Dedicated Effective Context Surface
 

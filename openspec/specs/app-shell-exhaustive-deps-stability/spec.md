@@ -1,7 +1,9 @@
 # app-shell-exhaustive-deps-stability Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-app-shell-parts-exhaustive-deps-hotspot. Update Purpose after archive.
+
+Defines the app-shell-exhaustive-deps-stability behavior contract, covering Search and composer callbacks remain stable after dependency remediation.
+
 ## Requirements
 ### Requirement: Search and composer callbacks remain stable after dependency remediation
 The system SHALL allow `app-shell-parts` search and composer callbacks to include all referenced stable setter dependencies without changing search palette open/close, selection reset, filter toggle, or result-opening behavior.

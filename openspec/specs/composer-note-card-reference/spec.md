@@ -1,7 +1,9 @@
 # composer-note-card-reference Specification
 
 ## Purpose
-TBD - created by archiving change add-workspace-note-card-pool. Update Purpose after archive.
+
+Defines the composer-note-card-reference behavior contract, covering `@#` MUST Trigger Note Card Picker Without Breaking Existing Triggers.
+
 ## Requirements
 ### Requirement: `@#` MUST Trigger Note Card Picker Without Breaking Existing Triggers
 

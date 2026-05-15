@@ -1,7 +1,9 @@
 # claude-context-compaction-recovery Specification
 
 ## Purpose
-TBD - created by archiving change claude-2026-03-23-auto-compact-retry-ui-signal. Update Purpose after archive.
+
+Defines the claude-context-compaction-recovery behavior contract, covering Claude Prompt-Overflow Auto Recovery.
+
 ## Requirements
 ### Requirement: Claude Prompt-Overflow Auto Recovery
 

@@ -165,6 +165,7 @@ import { GitHubPanelData, SettingsView } from "./app-shell-parts/lazyViews";
 import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoading";
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
+import { defineRuntimeThreadShellBoundary } from "./app-shell-parts/runtimeThreadBoundary";
 import { recordStartupMilestone } from "./features/startup-orchestration/utils/startupTrace";
 
 const resolveModelConfigEngine = (
@@ -785,6 +786,7 @@ export function AppShell() {
   const {
     files,
     directories,
+    directoryMetadata,
     gitignoredFiles,
     gitignoredDirectories,
     isLoading: isFilesLoading,
@@ -2099,9 +2101,50 @@ export function AppShell() {
     onDropPaths: handleDropWorkspacePaths,
   });
 
+  const runtimeThreadBoundary = defineRuntimeThreadShellBoundary({
+    activeItems,
+    activeThreadId,
+    activeTurnId,
+    activeTurnIdByThread,
+    activeWorkspace,
+    activeWorkspaceId,
+    canInterrupt,
+    completionEmailIntentByThread,
+    handleFusionStalled,
+    historyLoadingByThreadId,
+    historyRestoredAtMsByThread,
+    interruptTurn,
+    isProcessing,
+    isReviewing,
+    listThreadsForWorkspace,
+    loadOlderThreadsForWorkspace,
+    rateLimitsByWorkspace,
+    refreshAccountInfo,
+    refreshAccountRateLimits,
+    refreshThread,
+    resetWorkspaceThreads,
+    resolveCanonicalThreadId,
+    sendUserMessage,
+    sendUserMessageToThread,
+    setActiveThreadId,
+    startSharedSessionForWorkspace,
+    startThreadForWorkspace,
+    threadItemsByThread,
+    threadListCursorByWorkspace,
+    threadListLoadingByWorkspace,
+    threadListPagingByWorkspace,
+    threadParentById,
+    threadStatusById,
+    threadsByWorkspace,
+    tokenUsageByThread,
+    toggleCompletionEmailIntent,
+    updateSharedSessionEngineSelection,
+  });
+
   const agent = selectedAgent;
   const appShellContext = {
     ...APP_SHELL_LEGACY_CONTEXT_DEFAULTS,
+    runtimeThreadBoundary,
     GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
     activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeGitRoot, activeImages,
     activeFusingMessageId, activeItems, activeParentWorkspace, activePath, activePlan, activeQueue, activeQueuedHandoffBubble, activeRateLimits, activeRenamePrompt, activeTab, agentTaskScrollRequest,
@@ -2117,7 +2160,7 @@ export function AppShell() {
     confirmBranch, confirmClonePrompt, confirmCommit, confirmCustom, confirmRenameWorktreeUpstream, confirmWorktreePrompt, connectWorkspace, createBranch,
     createPrompt, createWorkspaceGroup, debugEntries, debugOpen, debugPanelHeight, deletePrompt, deleteThreadPrompt,
     deleteWorkspaceGroup, deletingWorktreeIds, dictationError, dictationHint, dictationLevel, dictationModel, dictationReady,
-    dictationState, dictationTranscript, diffScrollRequestId, diffSource, directories, dismissErrorToast, dismissUpdate, doctor, claudeDoctor,
+    dictationState, dictationTranscript, diffScrollRequestId, diffSource, directories, directoryMetadata, dismissErrorToast, dismissUpdate, doctor, claudeDoctor,
     editorHighlightTarget, editorNavigationTarget, editorSplitLayout, effectiveModels, effectiveReasoningSupported, effectiveSelectedModel,
     effectiveSelectedModelId, engineModelsAsOptions, engineSelectedModelIdByType, engineStatuses, ensureLaunchTerminal, ensureTerminalWithTitle,
     ensureWorkspaceThreadListLoaded, errorToasts, exitDiffView, expandRightPanel, expandSidebar, filePanelMode,

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change t1-3-ui-memory-list-improvements. Update Purpose after archive.
+Defines the memory-list-i18n behavior contract, covering Kind 字段国际化显示.
 
 ## Requirements
 

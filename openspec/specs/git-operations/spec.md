@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change git-history-panel. Update Purpose after archive.
+Defines the git-operations behavior contract, covering Pull Operation.
+
 ## Requirements
 ### Requirement: Pull Operation
 

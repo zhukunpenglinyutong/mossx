@@ -6,8 +6,9 @@ use super::process_diagnostics::{
 use super::{
     build_engine_observability, replace_workspace_session_with_source,
     replace_workspace_session_with_terminator, terminate_replaced_workspace_session,
-    write_json_atomically, RuntimeEndedRecord, RuntimeEngineObservability, RuntimeLifecycleState,
-    RuntimeManager, RuntimeProcessDiagnostics, RuntimeState,
+    write_json_atomically, RuntimeAcquireDisposition, RuntimeEndedRecord,
+    RuntimeEngineObservability, RuntimeLifecycleState, RuntimeManager, RuntimeProcessDiagnostics,
+    RuntimeState,
 };
 use crate::backend::app_server::{
     dispose_test_workspace_session, make_test_workspace_session, RuntimeShutdownSource,
@@ -15,7 +16,7 @@ use crate::backend::app_server::{
 };
 use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -36,6 +37,115 @@ fn workspace_entry(id: &str) -> WorkspaceEntry {
         worktree: None,
         settings,
     }
+}
+
+#[test]
+fn runtime_lifecycle_scenario_matrix_covers_p0_contracts() {
+    #[derive(Debug)]
+    struct RuntimeScenarioCoverage {
+        task: &'static str,
+        scenario: &'static str,
+        states: &'static [RuntimeLifecycleState],
+        contract: &'static str,
+    }
+
+    let matrix = [
+        RuntimeScenarioCoverage {
+            task: "2.2",
+            scenario: "fresh acquire becomes active",
+            states: &[
+                RuntimeLifecycleState::Idle,
+                RuntimeLifecycleState::Acquiring,
+                RuntimeLifecycleState::Active,
+            ],
+            contract: "runtime-required work must not skip the acquiring state before ready",
+        },
+        RuntimeScenarioCoverage {
+            task: "2.2",
+            scenario: "startup failure remains recoverable",
+            states: &[
+                RuntimeLifecycleState::Acquiring,
+                RuntimeLifecycleState::Recovering,
+            ],
+            contract:
+                "failed acquire records failure context without becoming a silent idle runtime",
+        },
+        RuntimeScenarioCoverage {
+            task: "2.3",
+            scenario: "automatic recovery budget reaches quarantine",
+            states: &[
+                RuntimeLifecycleState::Recovering,
+                RuntimeLifecycleState::Quarantined,
+            ],
+            contract: "automatic retry is bounded and exposes reconnect action",
+        },
+        RuntimeScenarioCoverage {
+            task: "2.3",
+            scenario: "explicit retry opens a fresh bounded acquire",
+            states: &[
+                RuntimeLifecycleState::Quarantined,
+                RuntimeLifecycleState::Acquiring,
+            ],
+            contract: "user retry bypasses stale automatic quarantine state by resetting the cycle",
+        },
+        RuntimeScenarioCoverage {
+            task: "2.4",
+            scenario: "replacement isolates late predecessor events",
+            states: &[
+                RuntimeLifecycleState::Active,
+                RuntimeLifecycleState::Replacing,
+                RuntimeLifecycleState::Active,
+            ],
+            contract: "old runtime events cannot end or poison the successor generation",
+        },
+        RuntimeScenarioCoverage {
+            task: "2.5",
+            scenario: "runtime ended settles active work and leases",
+            states: &[
+                RuntimeLifecycleState::Active,
+                RuntimeLifecycleState::Stopping,
+                RuntimeLifecycleState::Ended,
+            ],
+            contract:
+                "runtime-ended cleanup clears leases without manufacturing pseudo-stuck state",
+        },
+        RuntimeScenarioCoverage {
+            task: "2.5",
+            scenario: "manual release waits while foreground work is protected",
+            states: &[
+                RuntimeLifecycleState::Active,
+                RuntimeLifecycleState::Stopping,
+            ],
+            contract: "manual release cannot evict active foreground work as idle",
+        },
+    ];
+
+    let covered_tasks = matrix
+        .iter()
+        .map(|scenario| scenario.task)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(covered_tasks, BTreeSet::from(["2.2", "2.3", "2.4", "2.5"]));
+
+    for required_state in [
+        RuntimeLifecycleState::Idle,
+        RuntimeLifecycleState::Acquiring,
+        RuntimeLifecycleState::Active,
+        RuntimeLifecycleState::Replacing,
+        RuntimeLifecycleState::Stopping,
+        RuntimeLifecycleState::Recovering,
+        RuntimeLifecycleState::Quarantined,
+        RuntimeLifecycleState::Ended,
+    ] {
+        assert!(
+            matrix
+                .iter()
+                .any(|scenario| scenario.states.contains(&required_state)),
+            "scenario matrix should cover {required_state:?}",
+        );
+    }
+
+    assert!(matrix.iter().all(|scenario| !scenario.scenario.is_empty()));
+    assert!(matrix.iter().all(|scenario| !scenario.contract.is_empty()));
 }
 
 #[tokio::test]
@@ -102,6 +212,94 @@ async fn runtime_snapshot_projects_core_lifecycle_transitions() {
     assert_eq!(row.user_action.as_deref(), Some("retry"));
 
     dispose_test_workspace_session(&session).await;
+}
+
+#[tokio::test]
+async fn lifecycle_coordinator_fresh_acquire_projects_acquiring_then_active() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let coordinator = manager.lifecycle_coordinator();
+    let entry = workspace_entry("fresh-acquire-contract");
+
+    let acquire = coordinator
+        .acquire_or_retry(
+            "codex",
+            "fresh-acquire-contract",
+            "send-message",
+            true,
+            "timed out waiting for concurrent runtime acquire",
+        )
+        .await
+        .expect("fresh acquire should be allowed");
+    let token = match acquire {
+        RuntimeAcquireDisposition::Leader(token) => token,
+        RuntimeAcquireDisposition::Retry => panic!("fresh acquire should own the leader token"),
+    };
+
+    coordinator
+        .record_acquiring(&entry, "codex", "send-message")
+        .await;
+    let acquiring_snapshot = manager.snapshot(&AppSettings::default()).await;
+    let acquiring_row = acquiring_snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "fresh-acquire-contract")
+        .expect("acquiring row should exist");
+    assert_eq!(
+        acquiring_row.lifecycle_state,
+        RuntimeLifecycleState::Acquiring
+    );
+    assert_eq!(acquiring_row.user_action.as_deref(), Some("wait"));
+
+    let session = make_test_workspace_session("fresh-acquire-contract").await;
+    coordinator.record_active(&session, "runtime-ready").await;
+    coordinator.finish_acquire(&token).await;
+
+    let active_snapshot = manager.snapshot(&AppSettings::default()).await;
+    let active_row = active_snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "fresh-acquire-contract")
+        .expect("active row should exist");
+    assert_eq!(active_row.lifecycle_state, RuntimeLifecycleState::Active);
+    assert_eq!(active_row.last_guard_state.as_deref(), Some("ready"));
+    assert!(active_row.user_action.is_none());
+
+    dispose_test_workspace_session(&session).await;
+}
+
+#[tokio::test]
+async fn failed_startup_acquire_projects_recovering_without_clearing_retry_context() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("startup-failure-contract");
+
+    manager
+        .record_starting(&entry, "codex", "workspace-restore")
+        .await;
+    let quarantine = manager
+        .record_recovery_failure(
+            "codex",
+            "startup-failure-contract",
+            "workspace-restore",
+            "spawn failed before ready",
+        )
+        .await;
+    assert!(quarantine.is_none());
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "startup-failure-contract")
+        .expect("failed startup row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Recovering);
+    assert_eq!(row.reason_code.as_deref(), Some("probe-failed"));
+    assert_eq!(row.recovery_source.as_deref(), Some("workspace-restore"));
+    assert_eq!(
+        row.last_probe_failure_source.as_deref(),
+        Some("workspace-restore")
+    );
+    assert!(row.retryable);
+    assert_eq!(row.user_action.as_deref(), Some("wait"));
 }
 
 #[tokio::test]

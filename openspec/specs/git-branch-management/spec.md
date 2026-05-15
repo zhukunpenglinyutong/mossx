@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change git-history-panel. Update Purpose after archive.
+Defines the git-branch-management behavior contract, covering Hierarchical Branch List.
+
 ## Requirements
 ### Requirement: Hierarchical Branch List
 

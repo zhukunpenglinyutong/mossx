@@ -1,7 +1,9 @@
 # file-view-document-preview-modes Specification
 
 ## Purpose
-TBD - created by archiving change expand-file-view-document-preview-support. Update Purpose after archive.
+
+Defines the file-view-document-preview-modes behavior contract, covering File view SHALL resolve explicit preview modes for in-scope document formats.
+
 ## Requirements
 ### Requirement: File view SHALL resolve explicit preview modes for in-scope document formats
 

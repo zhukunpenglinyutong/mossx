@@ -1,7 +1,9 @@
 # shared-state-lock-governance Specification
 
 ## Purpose
-TBD - created by archiving change phase1-architecture-hardening. Update Purpose after archive.
+
+Defines the shared-state-lock-governance behavior contract, covering Shared State Domains MUST Be Explicit.
+
 ## Requirements
 ### Requirement: Shared State Domains MUST Be Explicit
 第一阶段涉及的 Rust shared state MUST 明确定义状态域与归属边界。

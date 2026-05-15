@@ -1,7 +1,9 @@
 # git-history-exhaustive-deps-stability Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-git-history-exhaustive-deps-hotspot. Update Purpose after archive.
+
+Defines the git-history-exhaustive-deps-stability behavior contract, covering Git history exhaustive-deps hotspot remediation must be batched by risk.
+
 ## Requirements
 ### Requirement: Git history exhaustive-deps hotspot remediation must be batched by risk
 

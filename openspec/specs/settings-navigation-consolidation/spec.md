@@ -1,7 +1,9 @@
 # settings-navigation-consolidation Specification
 
 ## Purpose
-TBD - created by archiving change consolidate-settings-basic-entry-tabs. Update Purpose after archive.
+
+Defines the settings-navigation-consolidation behavior contract, covering Basic Settings SHALL Host Shortcut And Open-App Tabs.
+
 ## Requirements
 ### Requirement: Basic Settings SHALL Host Shortcut And Open-App Tabs
 

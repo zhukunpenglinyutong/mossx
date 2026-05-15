@@ -1,7 +1,9 @@
 # settings-css-panel-sections-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-settings-css-panel-sections. Update Purpose after archive.
+
+Defines the settings-css-panel-sections-compatibility behavior contract, covering Settings CSS Section Split Compatibility.
+
 ## Requirements
 ### Requirement: Settings CSS Section Split Compatibility
 The system SHALL preserve the effective selector contract and user-visible settings panel styling when oversized settings CSS sections are moved into dedicated shard files.

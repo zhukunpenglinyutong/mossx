@@ -130,6 +130,8 @@ export function withThreadStatusDefaults(
       status?.codexCompactionLifecycleState ?? "idle",
     codexCompactionCompletedAt: status?.codexCompactionCompletedAt ?? null,
     lastTokenUsageUpdatedAt: status?.lastTokenUsageUpdatedAt ?? null,
+    codexSilentSuspectedAt: status?.codexSilentSuspectedAt ?? null,
+    codexSilentSuspectedSource: status?.codexSilentSuspectedSource ?? null,
   };
 }
 

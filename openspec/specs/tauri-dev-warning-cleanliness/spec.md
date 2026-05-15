@@ -1,7 +1,9 @@
 # tauri-dev-warning-cleanliness Specification
 
 ## Purpose
-TBD - created by archiving change clean-tauri-dev-warning-surface. Update Purpose after archive.
+
+Defines the tauri-dev-warning-cleanliness behavior contract, covering Repo-owned startup warnings are governed separately from environment-owned warnings.
+
 ## Requirements
 ### Requirement: Repo-owned startup warnings are governed separately from environment-owned warnings
 

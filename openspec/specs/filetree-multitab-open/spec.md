@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change improve-filetree-multitab-and-composer-visibility. Update Purpose after archive.
+Defines the filetree-multitab-open behavior contract, covering 文件树支持多文件并行打开.
+
 ## Requirements
 ### Requirement: 文件树支持多文件并行打开
 

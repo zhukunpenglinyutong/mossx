@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change link-composer-with-active-file-tab. Update Purpose after archive.
+Defines the composer-active-file-reference behavior contract, covering Composer 显示当前文件关联.
 
 ## Requirements
 

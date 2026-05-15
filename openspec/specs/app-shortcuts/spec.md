@@ -1,7 +1,9 @@
 # app-shortcuts Specification
 
 ## Purpose
-TBD - created by archiving change expand-configurable-app-shortcuts. Update Purpose after archive.
+
+Defines the app-shortcuts behavior contract, covering App Shortcuts MUST Use A Shared Configurable Contract.
+
 ## Requirements
 ### Requirement: App Shortcuts MUST Use A Shared Configurable Contract
 

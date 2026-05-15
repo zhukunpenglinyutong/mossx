@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change codex-native-plan-mode-sync-2026-02-28. Update Purpose after archive.
+Defines the codex-native-plan-default-parity behavior contract, covering Official Plan Default Terminology Parity.
 
 ## Requirements
 

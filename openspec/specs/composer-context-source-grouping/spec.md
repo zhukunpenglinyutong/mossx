@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change composer-project-scope-skill-command-discovery. Update Purpose after archive.
+Defines the composer-context-source-grouping behavior contract, covering Source-Grouped Context Menus.
+
 ## Requirements
 ### Requirement: Source-Grouped Context Menus
 

@@ -645,6 +645,179 @@
   padding-right: 4px;
 }
 
+.composer-memory-reference-control {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.composer-memory-reference-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+  flex: 0 0 auto;
+}
+
+.composer-memory-reference-toggle:hover {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--selector-pill-hover, transparent) 72%, transparent);
+}
+
+.composer-memory-reference-toggle.is-armed {
+  color: var(--input-focus-border, var(--accent-primary, var(--text-strong)));
+  background: color-mix(in srgb, var(--input-focus-border, var(--accent-primary, currentColor)) 14%, transparent);
+}
+
+.composer-memory-reference-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.composer-memory-reference-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 45;
+  width: min(252px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--composer-tool-popover-border, var(--border-strong, var(--border-subtle)));
+  border-radius: 9px;
+  background: var(--composer-tool-popover-bg, var(--dropdown-bg, var(--surface-panel, var(--surface-control))));
+  box-shadow: var(--shadow-popover, 0 10px 24px rgba(0, 0, 0, 0.24));
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+
+.composer-memory-reference-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 6px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-strong));
+}
+
+.composer-memory-reference-popover-title-group {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.composer-memory-reference-popover-title {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.composer-memory-reference-popover-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  color: var(--text-faint, var(--text-muted));
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.composer-memory-reference-popover-close:hover {
+  color: var(--text-primary);
+  background: var(--selector-pill-hover, transparent);
+}
+
+.composer-memory-reference-popover-body {
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px 0;
+}
+
+.composer-memory-reference-popover-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.composer-memory-reference-popover-label {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.composer-memory-reference-popover-value {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 680;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.composer-memory-reference-popover-copy {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.32;
+}
+
+.composer-memory-reference-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 0 8px 8px;
+}
+
+.composer-memory-reference-popover-secondary,
+.composer-memory-reference-popover-primary {
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1;
+  min-height: 24px;
+  padding: 6px 8px;
+}
+
+.composer-memory-reference-popover-secondary {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.composer-memory-reference-popover-secondary:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--selector-pill-hover, transparent) 70%, transparent);
+}
+
+.composer-memory-reference-popover-primary {
+  background: var(--button-primary, var(--input-focus-border, var(--accent-primary)));
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.composer-memory-reference-popover-primary:hover {
+  background: color-mix(in srgb, var(--button-primary, var(--input-focus-border, var(--accent-primary))) 88%, var(--text-primary) 12%);
+}
+
 .composer-memory-strip-head {
   display: flex;
   align-items: baseline;

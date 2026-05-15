@@ -1,7 +1,9 @@
 # exhaustive-deps-tail-warning-stability Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-exhaustive-deps-tail-warnings. Update Purpose after archive.
+
+Defines the exhaustive-deps-tail-warning-stability behavior contract, covering Tail warning remediation remains behavior-compatible.
+
 ## Requirements
 ### Requirement: Tail warning remediation remains behavior-compatible
 The system SHALL allow the remaining leaf-feature callbacks and effects to include all referenced dependencies without changing file tree, detached file explorer, task create modal, layout node, or worktree prompt behavior.

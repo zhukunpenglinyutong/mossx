@@ -1,7 +1,9 @@
 # runtime-mode-parity-governance Specification
 
 ## Purpose
-TBD - created by archiving change phase1-architecture-hardening. Update Purpose after archive.
+
+Defines the runtime-mode-parity-governance behavior contract, covering Runtime Mode Split MUST Remain Explicit During Bridge Extraction.
+
 ## Requirements
 ### Requirement: Runtime Mode Split MUST Remain Explicit During Bridge Extraction
 第一阶段 bridge 抽取 MUST 保持 desktop Tauri runtime 与 web-service runtime 的 mode split 语义显式且等价。

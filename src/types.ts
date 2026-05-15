@@ -1440,6 +1440,7 @@ export type MemoryContextInjectionMode = "summary" | "detail";
 export type MessageSendOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  memoryReferenceEnabled?: boolean;
   selectedNoteCardIds?: string[];
   selectedAgent?: SelectedAgentOption | null;
   model?: string | null;

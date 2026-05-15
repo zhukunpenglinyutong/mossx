@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change spec-hub-speckit-module-2026-02-25. Update Purpose after archive.
+Defines the spec-hub-adapter-speckit behavior contract, covering Auto Combo Router for Spec-kit.
 
 ## Requirements
 

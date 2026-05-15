@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change git-history-panel. Update Purpose after archive.
+Defines the git-commit-details behavior contract, covering Commit Metadata Panel.
 
 ## Requirements
 

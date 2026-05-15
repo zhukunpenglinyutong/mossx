@@ -1,7 +1,9 @@
 # workspace-topbar-session-tabs Specification
 
 ## Purpose
-TBD - created by archiving change add-topbar-session-tabs-rotation. Update Purpose after archive.
+
+Defines the workspace-topbar-session-tabs behavior contract, covering Workspace Chat Topbar SHALL Expose Opened Session Tabs.
+
 ## Requirements
 ### Requirement: Workspace Chat Topbar SHALL Expose Opened Session Tabs
 

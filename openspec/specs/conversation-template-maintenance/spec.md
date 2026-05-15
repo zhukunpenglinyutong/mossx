@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change fix-chat-template-bugs. Update Purpose after archive.
+Defines the conversation-template-maintenance behavior contract, covering Unified File Reference Interaction.
+
 ## Requirements
 ### Requirement: Unified File Reference Interaction
 系统 MUST 将 `File changes`、`批量编辑文件`、流式文本中的文件引用统一为同一文件详情弹窗交互协议。

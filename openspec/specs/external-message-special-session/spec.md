@@ -1,7 +1,9 @@
 # external-message-special-session Specification
 
 ## Purpose
-TBD - created by archiving change add-third-party-message-ingestion-feishu-2026-03-08. Update Purpose after archive.
+
+Defines the external-message-special-session behavior contract, covering System SHALL Create Special Session From External Message.
+
 ## Requirements
 ### Requirement: System SHALL Create Special Session From External Message
 

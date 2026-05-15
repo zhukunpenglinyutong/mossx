@@ -1,7 +1,9 @@
 # thread-messaging-session-tooling-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-thread-messaging-session-tooling. Update Purpose after archive.
+
+Defines the thread-messaging-session-tooling-compatibility behavior contract, covering Thread Messaging Session Tooling Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Thread Messaging Session Tooling Extraction Compatibility
 The system SHALL preserve the effective command surface and user-visible outcomes when session-tooling commands are moved out of `useThreadMessaging` into a feature-local hook.

@@ -1,7 +1,9 @@
 # codex-composer-startup-selection-stability Specification
 
 ## Purpose
-TBD - created by archiving change fix-codex-composer-startup-selection-stability. Update Purpose after archive.
+
+Defines the codex-composer-startup-selection-stability behavior contract, covering Codex Thread-Scoped Composer Selection MUST Wait For A Ready Workspace Catalog.
+
 ## Requirements
 ### Requirement: Codex Thread-Scoped Composer Selection MUST Wait For A Ready Workspace Catalog
 

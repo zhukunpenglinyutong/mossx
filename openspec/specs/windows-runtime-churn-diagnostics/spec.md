@@ -1,7 +1,9 @@
 # windows-runtime-churn-diagnostics Specification
 
 ## Purpose
-TBD - created by archiving change mitigate-windows-codex-runtime-churn. Update Purpose after archive.
+
+Defines the windows-runtime-churn-diagnostics behavior contract, covering Windows runtime churn diagnostics MUST attribute guarded recovery and replacement sources.
+
 ## Requirements
 ### Requirement: Windows runtime churn diagnostics MUST attribute guarded recovery and replacement sources
 

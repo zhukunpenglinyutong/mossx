@@ -1,7 +1,9 @@
 # bridge-cleanup-hardening Specification
 
 ## Purpose
-TBD - created by archiving change bridge-cleanup-and-large-file-modularization. Update Purpose after archive.
+
+Defines the bridge-cleanup-hardening behavior contract, covering Bridge Command Boundary Segregation.
+
 ## Requirements
 ### Requirement: Bridge Command Boundary Segregation
 The system SHALL separate Bridge command handlers from domain business services and shared adapters using explicit module boundaries.

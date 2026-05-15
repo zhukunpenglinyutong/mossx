@@ -107,6 +107,7 @@
   color: var(--text-muted);
   line-height: 1.58;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .composer-memory-picker-preview-markdown > * {

@@ -9,7 +9,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pushErrorToast } from "../../../services/toasts";
 import type { ConversationItem } from "../../../types";
 import { Composer } from "./Composer";
@@ -823,6 +823,13 @@ function ComposerHarness({
 }
 
 describe("Composer Claude rewind confirmation", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockImplementation(async () => null);
+    vi.mocked(revealItemInDir).mockReset();
+    vi.mocked(revealItemInDir).mockImplementation(async () => undefined);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     cleanup();

@@ -1,7 +1,9 @@
 # detached-file-explorer Specification
 
 ## Purpose
-TBD - created by archiving change add-detached-file-explorer-window. Update Purpose after archive.
+
+Defines the detached-file-explorer behavior contract, covering User can open a detached file explorer from the embedded file panel.
+
 ## Requirements
 ### Requirement: User can open a detached file explorer from the embedded file panel
 

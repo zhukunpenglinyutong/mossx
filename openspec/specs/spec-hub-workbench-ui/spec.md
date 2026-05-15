@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change codemoss-spec-hub-mvp-2026-02-23. Update Purpose after archive.
+Defines the spec-hub-workbench-ui behavior contract, covering Spec Hub Three-Column Layout with Execution Console.
+
 ## Requirements
 ### Requirement: Spec Hub Three-Column Layout with Execution Console
 

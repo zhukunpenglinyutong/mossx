@@ -1,7 +1,9 @@
 # codex-chat-canvas-user-input-elicitation Specification
 
 ## Purpose
-TBD - created by archiving change optimize-codex-chat-canvas. Update Purpose after archive.
+
+Defines the codex-chat-canvas-user-input-elicitation behavior contract, covering RequestUserInput GUI Rendering.
+
 ## Requirements
 ### Requirement: RequestUserInput GUI Rendering
 

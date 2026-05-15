@@ -1,7 +1,9 @@
 # codex-chat-canvas-usage-overview Specification
 
 ## Purpose
-TBD - created by archiving change codex-live-usage-entry-2026-03-02. Update Purpose after archive.
+
+Defines the codex-chat-canvas-usage-overview behavior contract, covering Codex-Only Usage Entry in Config Menu.
+
 ## Requirements
 ### Requirement: Codex-Only Usage Entry in Config Menu
 

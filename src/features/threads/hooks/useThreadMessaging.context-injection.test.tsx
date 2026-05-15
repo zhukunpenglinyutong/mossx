@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { useThreadMessaging } from "./useThreadMessaging";
 import {
@@ -56,7 +56,9 @@ vi.mock("../../../services/tauri", () => ({
 vi.mock("../../project-memory/services/projectMemoryFacade", () => ({
   projectMemoryFacade: {
     list: vi.fn(),
+    listSummary: vi.fn(),
     get: vi.fn(),
+    captureTurnInput: vi.fn(async () => null),
   },
 }));
 
@@ -74,11 +76,20 @@ const workspace: WorkspaceInfo = {
   settings: { sidebarCollapsed: false },
 };
 
-function buildHook(engine: "claude" | "codex", dispatch = vi.fn()) {
+function buildHook(
+  engine: "claude" | "codex" | "gemini",
+  dispatch = vi.fn(),
+  onDebug = vi.fn(),
+) {
   return renderHook(() =>
     useThreadMessaging({
       activeWorkspace: workspace,
-      activeThreadId: engine === "claude" ? "claude:session-1" : "thread-1",
+      activeThreadId:
+        engine === "claude"
+          ? "claude:session-1"
+          : engine === "gemini"
+            ? "gemini:session-1"
+            : "thread-1",
       steerEnabled: false,
       customPrompts: [],
       activeEngine: engine,
@@ -98,7 +109,7 @@ function buildHook(engine: "claude" | "codex", dispatch = vi.fn()) {
       setActiveTurnId: vi.fn(),
       recordThreadActivity: vi.fn(),
       safeMessageActivity: vi.fn(),
-      onDebug: vi.fn(),
+      onDebug,
       pushThreadErrorMessage: vi.fn(),
       ensureThreadForActiveWorkspace: vi.fn(),
       ensureThreadForWorkspace: vi.fn(),
@@ -113,14 +124,23 @@ function buildHook(engine: "claude" | "codex", dispatch = vi.fn()) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
   window.localStorage.clear();
   vi.mocked(projectMemoryCaptureAuto).mockResolvedValue(null);
   vi.mocked(projectMemoryFacade.list).mockResolvedValue({
     items: [],
     total: 0,
   } as never);
+  vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+    items: [],
+    total: 0,
+  } as never);
   vi.mocked(projectMemoryFacade.get).mockResolvedValue(null);
   vi.mocked(noteCardsFacade.get).mockResolvedValue(null);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("useThreadMessaging context injection", () => {
@@ -181,14 +201,15 @@ describe("useThreadMessaging context injection", () => {
     });
 
     const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
-    expect(textArg.startsWith("<project-memory")).toBe(true);
+    expect(textArg.startsWith("<project-memory-pack")).toBe(true);
     expect(textArg).toContain('source="manual-selection"');
+    expect(textArg).toContain("[M1]");
     expect(textArg).toContain("用户输入：数据库连接池超时怎么办");
     expect(textArg).toContain("数据库查询优化");
     expect(projectMemoryFacade.get).toHaveBeenCalledWith("m-1", "ws-1");
   });
 
-  it("supports summary mode for selected memory injection on codex path", async () => {
+  it("keeps selected memory injection detailed on codex path even when preview mode is summary", async () => {
     vi.mocked(sendUserMessage).mockResolvedValue({
       result: { turn: { id: "turn-2b" } },
     } as never);
@@ -226,7 +247,7 @@ describe("useThreadMessaging context injection", () => {
 
     const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
     expect(textArg).toContain("这是 summary 内容");
-    expect(textArg).not.toContain("这段 detail 不应被注入");
+    expect(textArg).toContain("这段 detail 不应被注入");
   });
 
   it("ignores localStorage contextInjectionEnabled=true and keeps plain text", async () => {
@@ -249,6 +270,490 @@ describe("useThreadMessaging context injection", () => {
 
     const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
     expect(textArg).toBe("plain-text");
+  });
+
+  it("injects Memory Scout brief as a separate memory-scout block on codex path", async () => {
+    const onDebug = vi.fn();
+    const dispatch = vi.fn();
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-memory-reference" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [
+        {
+          id: "m-scout-1",
+          workspaceId: "ws-1",
+          recordKind: "conversation_turn",
+          kind: "conversation",
+          title: "数据库连接池超时",
+          summary: "数据库 timeout 需要检查连接池上限",
+          detail: null,
+          cleanText: "数据库 timeout 需要检查连接池上限",
+          tags: ["数据库", "timeout"],
+          importance: "high",
+          threadId: "thread-source",
+          turnId: "turn-source",
+          engine: "codex",
+          source: "conversation_turn",
+          fingerprint: "fp",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      total: 1,
+    } as never);
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        steerEnabled: false,
+        customPrompts: [],
+        activeEngine: "codex",
+        threadStatusById: {},
+        itemsByThread: {},
+        activeTurnIdByThread: {},
+        codexAcceptedTurnByThread: {},
+        tokenUsageByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        interruptedThreadsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: vi.fn(),
+        getThreadEngine: vi.fn(),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug,
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(),
+        ensureThreadForWorkspace: vi.fn(),
+        refreshThread: vi.fn(),
+        forkThreadForWorkspace: vi.fn(),
+        updateThreadParent: vi.fn(),
+        startThreadForWorkspace: vi.fn(),
+        onInputMemoryCaptured: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "数据库 timeout 怎么排查",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toContain('<project-memory-pack source="memory-scout"');
+    expect(textArg).toContain("memoryId=m-scout-1");
+    expect(textArg).toContain("threadId=thread-source turnId=turn-source engine=codex");
+    expect(textArg).toContain("Source Records:");
+    expect(textArg).toContain("</project-memory-pack>\n\n数据库 timeout 怎么排查");
+    expect(projectMemoryFacade.listSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        query: null,
+        pageSize: 200,
+      }),
+    );
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "memory/scout-injected",
+        payload: expect.objectContaining({
+          injectedCount: 1,
+          reason: null,
+        }),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          role: "assistant",
+          text: expect.stringContaining("threads.memoryReferenceQuerying"),
+        }),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "upsertItem",
+        item: expect.objectContaining({
+          role: "assistant",
+          text: expect.stringContaining("threads.memoryReferenceReferenced"),
+        }),
+      }),
+    );
+    const memoryReferenceSummaryItems = dispatch.mock.calls
+      .map((call) => call[0])
+      .filter((action) =>
+        action?.type === "upsertItem" &&
+        action.item?.role === "assistant" &&
+        typeof action.item.text === "string" &&
+        action.item.text.includes("threads.memoryReference"),
+      )
+      .map((action) => action.item);
+    expect(memoryReferenceSummaryItems).toHaveLength(2);
+    expect(new Set(memoryReferenceSummaryItems.map((item) => item.id)).size).toBe(1);
+    expect(memoryReferenceSummaryItems[0]?.text).toContain(
+      "threads.memoryReferenceQuerying",
+    );
+    expect(memoryReferenceSummaryItems[1]?.text).toContain(
+      "threads.memoryReferenceReferenced",
+    );
+  });
+
+  it("recalls identity memory on production Memory Reference path without semantic provider", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-identity" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [
+        {
+          id: "m-identity",
+          workspaceId: "ws-1",
+          recordKind: "conversation_turn",
+          kind: "conversation",
+          title: "身份介绍",
+          summary: "用户介绍了自己的姓名",
+          detail: "用户输入：\n我是陈湘宁你是谁你有什么能力",
+          cleanText: "我是陈湘宁你是谁你有什么能力",
+          tags: ["identity"],
+          importance: "high",
+          userInput: "我是陈湘宁你是谁你有什么能力",
+          assistantResponse: "我是 Codex，你的工程协作伙伴。",
+          source: "conversation_turn",
+          fingerprint: "fp",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      total: 1,
+    } as never);
+    const { result } = buildHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "我是谁",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toContain('<project-memory-pack source="memory-scout"');
+    expect(textArg).toContain("memoryId=m-identity");
+    expect(textArg).toContain("我是陈湘宁");
+    expect(textArg).toContain("</project-memory-pack>\n\n我是谁");
+    expect(projectMemoryFacade.listSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        query: null,
+        pageSize: 200,
+      }),
+    );
+  });
+
+  it("keeps manual and memory-scout indexes unique when both sources are injected", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-memory-combined" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.get).mockResolvedValue({
+      id: "m-manual-1",
+      workspaceId: "ws-1",
+      recordKind: "manual_note",
+      kind: "note",
+      title: "手动发布记忆",
+      summary: "发布前先跑 typecheck",
+      detail: "发布前先跑 typecheck。",
+      cleanText: "发布前先跑 typecheck。",
+      tags: ["release"],
+      importance: "high",
+      source: "manual",
+      fingerprint: "fp-manual",
+      createdAt: 1,
+      updatedAt: 1,
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [
+        {
+          id: "m-scout-2",
+          workspaceId: "ws-1",
+          recordKind: "conversation_turn",
+          kind: "conversation",
+          title: "自动关联记忆",
+          summary: "部署需要检查环境变量",
+          detail: null,
+          cleanText: "部署需要检查环境变量",
+          tags: ["deploy"],
+          importance: "high",
+          threadId: "thread-source",
+          turnId: "turn-source",
+          engine: "codex",
+          source: "conversation_turn",
+          fingerprint: "fp-scout",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      total: 1,
+    } as never);
+    const { result } = buildHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "部署前检查什么",
+        [],
+        {
+          skipPromptExpansion: true,
+          selectedMemoryIds: ["m-manual-1"],
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toContain('<project-memory-pack source="manual-selection"');
+    expect(textArg).toContain("[M1] memoryId=m-manual-1");
+    expect(textArg).toContain('<project-memory-pack source="memory-scout"');
+    expect(textArg).toContain("[M2] memoryId=m-scout-2");
+    expect(textArg).not.toContain("[M1] memoryId=m-scout-2");
+    expect(textArg).toContain("</project-memory-pack>\n\n部署前检查什么");
+  });
+
+  it("keeps main send unblocked when Memory Scout returns empty", async () => {
+    const onDebug = vi.fn();
+    const dispatch = vi.fn();
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-memory-empty" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [],
+      total: 0,
+    } as never);
+
+    const { result } = buildHook("codex", dispatch, onDebug);
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "没有相关记忆的问题",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toBe("没有相关记忆的问题");
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        item: expect.objectContaining({
+          text: expect.stringContaining("threads.memoryReferenceNoRelated"),
+        }),
+      }),
+    );
+    const memoryReferenceSummaryItems = dispatch.mock.calls
+      .map((call) => call[0])
+      .filter((action) =>
+        action?.type === "upsertItem" &&
+        action.item?.role === "assistant" &&
+        typeof action.item.text === "string" &&
+        action.item.text.includes("threads.memoryReference"),
+      )
+      .map((action) => action.item);
+    expect(memoryReferenceSummaryItems).toHaveLength(2);
+    expect(new Set(memoryReferenceSummaryItems.map((item) => item.id)).size).toBe(1);
+    expect(memoryReferenceSummaryItems[0]?.text).toContain(
+      "threads.memoryReferenceQuerying",
+    );
+    expect(memoryReferenceSummaryItems[1]?.text).toContain(
+      "threads.memoryReferenceNoRelated",
+    );
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "memory/scout-skipped",
+        payload: expect.objectContaining({
+          reason: "scout_empty",
+        }),
+      }),
+    );
+  });
+
+  it("keeps main send unblocked when Memory Scout fails", async () => {
+    const onDebug = vi.fn();
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-memory-error" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockRejectedValue(new Error("boom"));
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        steerEnabled: false,
+        customPrompts: [],
+        activeEngine: "codex",
+        threadStatusById: {},
+        itemsByThread: {},
+        activeTurnIdByThread: {},
+        codexAcceptedTurnByThread: {},
+        tokenUsageByThread: {},
+        rateLimitsByWorkspace: {},
+        pendingInterruptsRef: { current: new Set<string>() },
+        interruptedThreadsRef: { current: new Set<string>() },
+        dispatch: vi.fn(),
+        getCustomName: vi.fn(),
+        getThreadEngine: vi.fn(),
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        onDebug,
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace: vi.fn(),
+        ensureThreadForWorkspace: vi.fn(),
+        refreshThread: vi.fn(),
+        forkThreadForWorkspace: vi.fn(),
+        updateThreadParent: vi.fn(),
+        startThreadForWorkspace: vi.fn(),
+        onInputMemoryCaptured: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "失败也要发送",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toBe("失败也要发送");
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "memory/scout-skipped",
+        payload: expect.objectContaining({
+          reason: "scout_error",
+        }),
+      }),
+    );
+  });
+
+  it("keeps main send unblocked when Memory Scout times out", async () => {
+    vi.useFakeTimers();
+    const onDebug = vi.fn();
+    const dispatch = vi.fn();
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-memory-timeout" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockReturnValue(new Promise(() => {}) as never);
+    const { result } = buildHook("codex", dispatch, onDebug);
+
+    await act(async () => {
+      const sendPromise = result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "超时也要发送",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+      await vi.advanceTimersByTimeAsync(1600);
+      await sendPromise;
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toBe("超时也要发送");
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        item: expect.objectContaining({
+          text: expect.stringContaining("threads.memoryReferenceTimeout"),
+        }),
+      }),
+    );
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "memory/scout-skipped",
+        payload: expect.objectContaining({
+          reason: "scout_timeout",
+        }),
+      }),
+    );
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ["claude", "claude:session-1"],
+    ["gemini", "gemini:session-1"],
+  ] as const)("uses the same memory-scout block on %s path", async (engine, threadId) => {
+    vi.mocked(engineSendMessage).mockResolvedValue({
+      result: { turn: { id: `turn-${engine}` } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [
+        {
+          id: `m-${engine}`,
+          workspaceId: "ws-1",
+          recordKind: "conversation_turn",
+          kind: "conversation",
+          title: "数据库 timeout",
+          summary: "数据库 timeout 复盘",
+          detail: null,
+          cleanText: "数据库 timeout 复盘",
+          tags: ["数据库", "timeout"],
+          importance: "high",
+          source: "conversation_turn",
+          fingerprint: "fp",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      total: 1,
+    } as never);
+    const { result } = buildHook(engine);
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        threadId,
+        "数据库 timeout",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const payload = vi.mocked(engineSendMessage).mock.calls[0]?.[1] as any;
+    expect(payload.text).toContain('<project-memory-pack source="memory-scout"');
+    expect(payload.text).toContain(`memoryId=m-${engine}`);
+    expect(payload.text).toContain("</project-memory-pack>\n\n数据库 timeout");
   });
 
   it("inserts a separate note-card context summary item and keeps note images in the injected context", async () => {

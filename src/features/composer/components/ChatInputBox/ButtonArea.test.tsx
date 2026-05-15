@@ -472,4 +472,54 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(reasoningSelect.compareDocumentPosition(mainSurface) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("confirms memory reference before arming it", () => {
+    const onToggleMemoryReference = vi.fn();
+
+    render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+        memoryReferenceArmed={false}
+        onToggleMemoryReference={onToggleMemoryReference}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "composer.memoryReferenceToggle" });
+    fireEvent.click(toggle);
+
+    expect(onToggleMemoryReference).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceConfirm" }));
+
+    expect(onToggleMemoryReference).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
+  });
+
+  it("turns off armed memory reference directly from the icon", () => {
+    const onToggleMemoryReference = vi.fn();
+
+    render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+        memoryReferenceArmed
+        onToggleMemoryReference={onToggleMemoryReference}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "composer.memoryReferenceToggle" }));
+
+    expect(onToggleMemoryReference).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog", { name: "composer.memoryReferenceDialogTitle" })).toBeNull();
+  });
+
 });

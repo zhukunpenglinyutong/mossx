@@ -1,7 +1,9 @@
 # workspace-session-folder-tree Specification
 
 ## Purpose
-TBD - created by archiving change manage-project-session-folders. Update Purpose after archive.
+
+Defines the workspace-session-folder-tree behavior contract, covering Project Sessions SHALL Support A Folder Tree Organization Layer.
+
 ## Requirements
 ### Requirement: Project Sessions SHALL Support A Folder Tree Organization Layer
 

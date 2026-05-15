@@ -7,7 +7,7 @@ import {
   loadClaudeSession,
   listClaudeSessions,
   listThreads,
-  projectMemoryCreate,
+  projectMemoryCompleteTurn,
   resumeThread,
   sendConversationCompletionEmail,
 } from "../../../services/tauri";
@@ -157,7 +157,7 @@ vi.mock("../../../services/tauri", () => ({
   getAccountInfo: vi.fn(),
   interruptTurn: vi.fn(),
   projectMemoryUpdate: vi.fn(),
-  projectMemoryCreate: vi.fn(),
+  projectMemoryCompleteTurn: vi.fn(),
   sendConversationCompletionEmail: vi.fn(),
 }));
 
@@ -175,16 +175,18 @@ describe("useThreads memory race integration", () => {
     triggerInputMemoryCaptured = null;
     optimisticUserSequence = 0;
     vi.clearAllMocks();
-    vi.mocked(projectMemoryCreate).mockResolvedValue({
+    vi.mocked(projectMemoryCompleteTurn).mockResolvedValue({
       id: "m-1",
       workspaceId: "ws-1",
+      schemaVersion: 2,
+      recordKind: "conversation_turn",
       kind: "conversation",
       title: "t",
       summary: "s",
       cleanText: "c",
       tags: [],
       importance: "medium",
-      source: "assistant_output_digest",
+      source: "conversation_turn",
       fingerprint: "f",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -235,14 +237,16 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     expect(payload?.kind).toBe("conversation");
     expect(payload?.threadId).toBe("thread-race-1");
-    expect(payload?.messageId).toBe("assistant-item-1");
+    expect(payload?.assistantMessageId).toBe("assistant-item-1");
     expect(payload?.engine).toBe("claude");
+    expect(payload?.userInput).toBe("这是用户输入。");
+    expect(payload?.assistantResponse).toBe("这是助手输出。");
   });
 
   it("merges memory even when capture arrives with pending Claude thread ID after session rename", async () => {
@@ -283,13 +287,13 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     expect(payload?.kind).toBe("conversation");
     expect(payload?.threadId).toBe("claude:session-abc");
-    expect(payload?.messageId).toBe("assistant-item-2");
+    expect(payload?.assistantMessageId).toBe("assistant-item-2");
     expect(payload?.engine).toBe("claude");
   });
 
@@ -324,10 +328,10 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     expect(payload?.kind).toBe("known_issue");
     expect(payload?.importance).toBe("low");
   });
@@ -363,10 +367,10 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     expect(payload?.kind).toBe("code_decision");
   });
 
@@ -401,10 +405,10 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     expect(payload?.kind).toBe("project_context");
   });
 
@@ -439,10 +443,10 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     expect(payload?.kind).toBe("conversation");
   });
 
@@ -485,16 +489,16 @@ describe("useThreads memory race integration", () => {
     });
 
     await waitFor(() => {
-      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
     });
 
-    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
     const summary = payload?.summary ?? "";
-    const detail = payload?.detail ?? "";
+    const assistantResponse = payload?.assistantResponse ?? "";
     expect((summary.match(/好的，更新记录/g) ?? []).length).toBeLessThanOrEqual(1);
     expect((summary.match(/2026年2月23日中午/g) ?? []).length).toBe(1);
-    expect((detail.match(/2026年2月23日中午/g) ?? []).length).toBe(1);
-    expect(detail).not.toContain("助手输出：");
+    expect((assistantResponse.match(/2026年2月23日中午/g) ?? []).length).toBe(1);
+    expect(assistantResponse).not.toContain("助手输出：");
   });
 
   it("still merges when assistant completion arrives after 30s (slow Claude turn)", async () => {
@@ -535,11 +539,406 @@ describe("useThreads memory race integration", () => {
       });
 
       await waitFor(() => {
-        expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
       });
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it("keeps same-thread Codex turn memories isolated by turn id", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "codex",
+      }),
+    );
+
+    const firstUserInput = [
+      "第一轮用户输入：需要完整保存这段很长的 Codex 提问。",
+      "包含边界：路径 C:\\work\\mossx 和 /Users/dev/mossx 都不能影响存储。",
+    ].join("\n");
+    const firstAssistantResponse = [
+      "第一轮 AI 回复：这是完整回答正文。",
+      "不能因为同线程第二轮先完成就丢失。",
+    ].join("\n");
+    const secondUserInput = "第二轮用户输入：先完成这一轮。";
+    const secondAssistantResponse = "第二轮 AI 回复：先完成但不能清掉第一轮 pending。";
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-memory",
+        turnId: "codex-turn-1",
+        inputText: firstUserInput,
+        memoryId: "memory-codex-1",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: "codex",
+      });
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-memory",
+        turnId: "codex-turn-2",
+        inputText: secondUserInput,
+        memoryId: "memory-codex-2",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: "codex",
+      });
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-memory",
+        turnId: "codex-turn-2",
+        itemId: "assistant-codex-2",
+        text: secondAssistantResponse,
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-memory",
+        turnId: "codex-turn-1",
+        itemId: "assistant-codex-1",
+        text: firstAssistantResponse,
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(2);
+    });
+
+    const codexPayloads = vi.mocked(projectMemoryCompleteTurn).mock.calls.map(
+      ([payload]) => payload,
+    );
+    expect(codexPayloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          engine: "codex",
+          threadId: "codex-thread-memory",
+          turnId: "codex-turn-1",
+          memoryId: "memory-codex-1",
+          userInput: firstUserInput,
+          assistantResponse: firstAssistantResponse,
+          assistantMessageId: "assistant-codex-1",
+        }),
+        expect.objectContaining({
+          engine: "codex",
+          threadId: "codex-thread-memory",
+          turnId: "codex-turn-2",
+          memoryId: "memory-codex-2",
+          userInput: secondUserInput,
+          assistantResponse: secondAssistantResponse,
+          assistantMessageId: "assistant-codex-2",
+        }),
+      ]),
+    );
+  });
+
+  it("updates one Codex turn memory when the final answer arrives after an initial assistant segment", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "codex",
+      }),
+    );
+
+    const initialAssistantSegment =
+      "我会先按项目启动协议读取 Trellis/本地规范，再做只读扫描：项目结构、技术栈、启动方式、核心模块与潜在风险。当前不改文件。";
+    const finalAssistantSegment = [
+      "项目是什么？",
+      "这是一个 Spring Boot 2.7.18 + Java 11 的多端认证 Demo，核心能力是注册、登录、JWT 鉴权、Refresh Token。",
+      "主要风险有 5 个：SecurityConfig 注释乱码、JWT Filter 直接信任 Token claims、H2 Console 暴露、Actuator 全量放行、仓库混入 .DS_Store。",
+    ].join("\n\n");
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-multi-segment",
+        turnId: "codex-turn-multi-segment",
+        inputText: "项目分析",
+        memoryId: "memory-codex-multi-segment",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: "codex",
+      });
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-multi-segment",
+        turnId: "codex-turn-multi-segment",
+        itemId: "assistant-codex-segment-1",
+        text: initialAssistantSegment,
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-multi-segment",
+        turnId: "codex-turn-multi-segment",
+        itemId: "assistant-codex-segment-2",
+        text: finalAssistantSegment,
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(2);
+    });
+
+    const [firstPayload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
+    const [secondPayload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[1] ?? [];
+    expect(firstPayload).toEqual(
+      expect.objectContaining({
+        engine: "codex",
+        memoryId: "memory-codex-multi-segment",
+        turnId: "codex-turn-multi-segment",
+        assistantMessageId: "assistant-codex-segment-1",
+        assistantResponse: initialAssistantSegment,
+      }),
+    );
+    expect(secondPayload).toEqual(
+      expect.objectContaining({
+        engine: "codex",
+        memoryId: "memory-codex-multi-segment",
+        turnId: "codex-turn-multi-segment",
+        assistantMessageId: "assistant-codex-segment-2",
+      }),
+    );
+    expect(secondPayload?.assistantResponse).toContain(initialAssistantSegment);
+    expect(secondPayload?.assistantResponse).toContain(finalAssistantSegment);
+    expect(secondPayload?.assistantResponse).toContain("JWT Filter 直接信任 Token claims");
+  });
+
+  it("keeps Codex multi-segment memory open when initial completion arrives before input capture", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "codex",
+      }),
+    );
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-completed-first",
+        turnId: "codex-turn-completed-first",
+        itemId: "assistant-codex-early",
+        text: "我会先读取项目规范并做只读扫描。",
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-completed-first",
+        turnId: "codex-turn-completed-first",
+        inputText: "项目分析",
+        memoryId: "memory-codex-completed-first",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: "codex",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-completed-first",
+        turnId: "codex-turn-completed-first",
+        itemId: "assistant-codex-final",
+        text: "最终分析：这是 Spring Boot 认证 Demo，风险包括 JWT claims 信任、H2 Console 暴露和 Actuator 放行。",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(2);
+    });
+
+    const [secondPayload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[1] ?? [];
+    expect(secondPayload).toEqual(
+      expect.objectContaining({
+        engine: "codex",
+        memoryId: "memory-codex-completed-first",
+        turnId: "codex-turn-completed-first",
+        assistantMessageId: "assistant-codex-final",
+      }),
+    );
+    expect(secondPayload?.assistantResponse).toContain("我会先读取项目规范并做只读扫描。");
+    expect(secondPayload?.assistantResponse).toContain("最终分析：这是 Spring Boot 认证 Demo");
+  });
+
+  it("keeps Codex multi-segment memory open when engine metadata is missing", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "codex",
+      }),
+    );
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-missing-engine",
+        turnId: "codex-turn-missing-engine",
+        inputText: "项目分析",
+        memoryId: "memory-codex-missing-engine",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: null,
+      });
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-missing-engine",
+        turnId: "codex-turn-missing-engine",
+        itemId: "assistant-codex-missing-engine-1",
+        text: "第一段：先扫描项目。",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "codex-thread-missing-engine",
+        turnId: "codex-turn-missing-engine",
+        itemId: "assistant-codex-missing-engine-2",
+        text: "第二段：最终结论包含完整风险列表。",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(2);
+    });
+
+    const [secondPayload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[1] ?? [];
+    expect(secondPayload).toEqual(
+      expect.objectContaining({
+        memoryId: "memory-codex-missing-engine",
+        turnId: "codex-turn-missing-engine",
+        assistantMessageId: "assistant-codex-missing-engine-2",
+      }),
+    );
+    expect(secondPayload?.assistantResponse).toContain("第一段：先扫描项目。");
+    expect(secondPayload?.assistantResponse).toContain("第二段：最终结论包含完整风险列表。");
+  });
+
+  it("writes a completed Claude turn only once when duplicate completed events arrive", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "thread-duplicate-complete",
+        turnId: "turn-duplicate-complete",
+        inputText: "用户输入：重复 completed 只能写一次。",
+        memoryId: "memory-duplicate-complete",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-duplicate-complete",
+        turnId: "turn-duplicate-complete",
+        itemId: "assistant-duplicate-complete",
+        text: "AI 回复：重复 completed 只能写一次。",
+      });
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-duplicate-complete",
+        turnId: "turn-duplicate-complete",
+        itemId: "assistant-duplicate-complete",
+        text: "AI 回复：重复 completed 只能写一次。",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("uses the same Project Memory turn contract for Gemini normalized smoke", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "gemini",
+      }),
+    );
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "gemini:memory-smoke",
+        turnId: "gemini-turn-memory-1",
+        inputText: "Gemini 用户输入全文。",
+        memoryId: "memory-gemini-1",
+        workspaceName: "ccgui",
+        workspacePath: "/tmp/codemoss",
+        engine: "gemini",
+      });
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "gemini:memory-smoke",
+        turnId: "gemini-turn-memory-1",
+        itemId: "assistant-gemini-1",
+        text: "Gemini AI 回复全文。",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCompleteTurn)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCompleteTurn).mock.calls[0] ?? [];
+    expect(payload).toEqual(
+      expect.objectContaining({
+        engine: "gemini",
+        threadId: "gemini:memory-smoke",
+        turnId: "gemini-turn-memory-1",
+        memoryId: "memory-gemini-1",
+        userInput: "Gemini 用户输入全文。",
+        assistantResponse: "Gemini AI 回复全文。",
+        assistantMessageId: "assistant-gemini-1",
+      }),
+    );
   });
 
   it("reconciles codex realtime output from history once after turn completion", async () => {

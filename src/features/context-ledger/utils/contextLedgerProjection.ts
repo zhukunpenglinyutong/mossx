@@ -119,9 +119,9 @@ function formatLineRange(
 }
 
 const MANUAL_MEMORY_USER_INPUT_REGEX =
-  /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
+  /(?:^|\n)\s*(?:用户输入|User input)[:：]\s*([\s\S]*?)(?=\n+\s*(?:AI 回复|助手输出摘要|助手输出|Assistant response|Assistant summary|Assistant output)[:：]|$)/i;
 const MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX =
-  /(?:^|\n)\s*助手输出摘要[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出|用户输入)[:：]|$)/;
+  /(?:^|\n)\s*(?:AI 回复|助手输出摘要|助手输出|Assistant response|Assistant summary|Assistant output)[:：]\s*([\s\S]*?)(?=\n+\s*(?:用户输入|User input)[:：]|$)/i;
 
 function resolveManualMemoryTitle(memory: ContextLedgerProjectionInput["selectedManualMemories"][number]) {
   const detail = memory.detail.trim();

@@ -48,6 +48,7 @@ import { ReviewInlinePrompt } from "./ReviewInlinePrompt";
 import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { formatRelativeTime } from "../../../utils/time";
+import { resolveManualMemoryPreview } from "../utils/manualMemoryPreview";
 
 type ComposerInputProps = {
   text: string;
@@ -209,9 +210,6 @@ function parseMemoryPreviewSections(text: string): MemoryPreviewSection[] {
 }
 
 const MEMORY_TRIGGER_PREFIX = /^(?:\s|["'`]|\(|\[|\{)$/;
-const MEMORY_USER_INPUT_REGEX =
-  /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
-
 function getManualMemoryQueryText(text: string, cursor: number | null | undefined) {
   if (!text) {
     return "";
@@ -234,18 +232,6 @@ function getManualMemoryQueryText(text: string, cursor: number | null | undefine
     return "";
   }
   return afterAt.trim();
-}
-
-function getMemoryUserInputText(item: AutocompleteItem) {
-  const detail = (item.memoryDetail || "").trim();
-  if (!detail) {
-    return "";
-  }
-  const matched = detail.match(MEMORY_USER_INPUT_REGEX);
-  if (!matched || !matched[1]) {
-    return "";
-  }
-  return matched[1].replace(/\s+/g, " ").trim();
 }
 
 const suggestionIcon = (item: AutocompleteItem) => {
@@ -1423,8 +1409,16 @@ export function ComposerInput({
                   {suggestions.map((item, index) => {
                     const memoryId = item.memoryId ?? item.id;
                     const selected = selectedManualMemoryIdSet.has(memoryId);
+                    const selectedMemoryIndex = selectedManualMemoryIds.indexOf(memoryId);
                     const isActive = index === highlightIndex;
-                    const displayTitle = getMemoryUserInputText(item) || item.label;
+                    const preview = resolveManualMemoryPreview({
+                      index: selectedMemoryIndex >= 0 ? `[M${selectedMemoryIndex + 1}]` : null,
+                      label: item.label,
+                      title: item.memoryTitle,
+                      summary: item.memorySummary,
+                      detail: item.memoryDetail,
+                      description: item.description,
+                    });
                     const tags = (item.memoryTags || []).slice(0, 3);
                     const importanceTone = normalizeMemoryImportance(item.memoryImportance);
                     return (
@@ -1447,7 +1441,10 @@ export function ComposerInput({
                           {selected ? <CheckCircle2 size={14} /> : <Circle size={14} />}
                         </span>
                         <span className="composer-memory-picker-card-main">
-                          <span className="composer-memory-picker-card-title">{displayTitle}</span>
+                          <span className="composer-memory-picker-card-title">{preview.title}</span>
+                          <span className="composer-memory-picker-card-summary">
+                            {preview.summary}
+                          </span>
                           <span className="composer-memory-picker-card-meta">
                             <span className="composer-memory-picker-card-meta-item">
                               <Layers3 size={12} />

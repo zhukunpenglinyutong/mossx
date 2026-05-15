@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change opencode-session-hard-delete. Update Purpose after archive.
+Defines the kanban-popover-dismiss-behavior behavior contract, covering 看板 Popover 不因外部点击意外关闭.
 
 ## Requirements
 

@@ -407,7 +407,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     });
   });
 
-  it("settles codex foreground turns after the bounded no-progress window", () => {
+  it("marks codex foreground turns as suspected after the bounded no-progress window", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -417,13 +417,23 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
-    const stalledEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(itemHookFactory.getMarkRealtimeTurnTerminal()).not.toHaveBeenCalled();
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "markCodexSilentSuspected",
+      threadId: "thread-1",
+      timestamp: Date.now(),
+      source: "frontend-no-progress-suspected",
+    });
+    const suspectedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
     );
-    expect(stalledEntry?.payload.diagnosticCategory).toBe("codex-no-progress");
-    expect(stalledEntry?.payload.turnId).toBe("turn-1");
+    expect(suspectedEntry?.payload.diagnosticCategory).toBe("codex-no-progress");
+    expect(suspectedEntry?.payload.turnId).toBe("turn-1");
+    expect(suspectedEntry?.payload.source).toBe("frontend-no-progress-suspected");
+    expect(suspectedEntry?.payload.terminal).toBe(false);
+    expect(suspectedEntry?.payload.quarantine).toBe(false);
   });
 
   it("keeps execution-active codex turns out of stalled state at the base window", () => {
@@ -457,17 +467,17 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS - 15 * 60_000);
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    const stalledEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    const suspectedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
     );
-    expect(stalledEntry?.payload.timeoutMs).toBe(
+    expect(suspectedEntry?.payload.timeoutMs).toBe(
       CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
     );
-    expect(stalledEntry?.payload.activeExecutionItemCount).toBe(1);
+    expect(suspectedEntry?.payload.activeExecutionItemCount).toBe(1);
   });
 
-  it("keeps quarantined late codex normalized events diagnostic-only after stalled settlement", () => {
+  it("allows late codex normalized events after frontend no-progress suspicion", () => {
     const onDebug = vi.fn();
     const options = makeOptions(onDebug);
     const { result } = renderHook(() => useThreadEventHandlers(options));
@@ -477,7 +487,6 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
     options.dispatch.mockClear();
     options.markProcessing.mockClear();
     options.setActiveTurnId.mockClear();
@@ -506,14 +515,25 @@ describe("useThreadEventHandlers diagnostics", () => {
       });
     });
 
-    expect(options.dispatch).not.toHaveBeenCalled();
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "markContinuationEvidence",
+      threadId: "thread-1",
+    });
+    expect(options.dispatch).toHaveBeenCalledWith({
+      type: "clearCodexSilentSuspected",
+      threadId: "thread-1",
+    });
     expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", true);
     expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", "turn-1");
     const skippedEntry = collectDiagnosticCalls(onDebug).find(
       (entry) => entry.label === "thread/session:turn-diagnostic:quarantined-codex-event-skipped",
     );
-    expect(skippedEntry?.payload.eventTurnId).toBe("turn-1");
-    expect(skippedEntry?.payload.quarantineReason).toBe("codex_no_progress_timeout");
+    expect(skippedEntry).toBeUndefined();
+    const recoveredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-recovered",
+    );
+    expect(recoveredEntry?.payload.turnId).toBe("turn-1");
+    expect(recoveredEntry?.payload.progressSource).toBe("normalized:appendAgentMessageDelta");
 
     act(() => {
       result.current.onTurnStarted("ws-1", "thread-1", "turn-2");
@@ -662,12 +682,12 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
-    const stalledEntry = collectDiagnosticCalls(onDebug).find(
-      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    const suspectedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
     );
-    expect(stalledEntry?.payload.timeoutMs).toBe(CODEX_TURN_NO_PROGRESS_STALL_MS);
-    expect(stalledEntry?.payload.activeExecutionItemCount).toBe(0);
+    expect(suspectedEntry?.payload.timeoutMs).toBe(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    expect(suspectedEntry?.payload.activeExecutionItemCount).toBe(0);
   });
 
   it("resets codex no-progress settlement when turn progress arrives", () => {
@@ -693,7 +713,112 @@ describe("useThreadEventHandlers diagnostics", () => {
       vi.advanceTimersByTime(1_000);
     });
 
-    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
+      ),
+    ).toBe(true);
+  });
+
+  it("treats codex processing heartbeat as no-progress evidence", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+      result.current.onProcessingHeartbeat("ws-1", "thread-1", 1);
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
+      ),
+    ).toBe(false);
+  });
+
+  it("treats codex token usage updates as no-progress evidence", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+      result.current.onThreadTokenUsageUpdated("ws-1", "thread-1", {
+        total_tokens: 32,
+      });
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
+      ),
+    ).toBe(false);
+  });
+
+  it("treats codex active status events as no-progress evidence", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+      result.current.onAppServerEvent({
+        workspace_id: "ws-1",
+        message: {
+          method: "thread/status/changed",
+          params: {
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            status: "active",
+          },
+        },
+      });
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat uncorrelated codex status events as no-progress evidence", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+      result.current.onAppServerEvent({
+        workspace_id: "ws-1",
+        message: {
+          method: "thread/status/changed",
+          params: {
+            thread_id: "thread-1",
+            status: "active",
+          },
+        },
+      });
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-suspected",
+      ),
+    ).toBe(true);
   });
 
   it("does not apply the codex no-progress settlement to non-codex turns", () => {
@@ -709,6 +834,7 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(options.markProcessing).not.toHaveBeenCalledWith("claude:session-1", false);
     const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
     expect(labels).not.toContain("thread/session:turn-diagnostic:codex-no-progress-stalled");
+    expect(labels).not.toContain("thread/session:turn-diagnostic:codex-no-progress-suspected");
   });
 
   it("cancels the stall warning once the first execution item arrives", () => {

@@ -524,6 +524,10 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         previous?.codexCompactionCompletedAt ?? null;
       const lastTokenUsageUpdatedAt =
         previous?.lastTokenUsageUpdatedAt ?? null;
+      const codexSilentSuspectedAt =
+        previous?.codexSilentSuspectedAt ?? null;
+      const codexSilentSuspectedSource =
+        previous?.codexSilentSuspectedSource ?? null;
       if (action.isProcessing) {
         if (REDUCER_NOOP_GUARD_ENABLED && wasProcessing) {
           return state;
@@ -547,6 +551,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
               codexCompactionLifecycleState: compactionLifecycleState,
               codexCompactionCompletedAt: compactionCompletedAt,
               lastTokenUsageUpdatedAt,
+              codexSilentSuspectedAt,
+              codexSilentSuspectedSource,
             },
           },
         };
@@ -582,6 +588,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             codexCompactionLifecycleState: compactionLifecycleState,
             codexCompactionCompletedAt: compactionCompletedAt,
             lastTokenUsageUpdatedAt,
+            codexSilentSuspectedAt: null,
+            codexSilentSuspectedSource: null,
           },
         },
       };
@@ -651,6 +659,10 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             codexCompactionCompletedAt: nextCompletedAt,
             lastTokenUsageUpdatedAt:
               previous?.lastTokenUsageUpdatedAt ?? null,
+            codexSilentSuspectedAt:
+              previous?.codexSilentSuspectedAt ?? null,
+            codexSilentSuspectedSource:
+              previous?.codexSilentSuspectedSource ?? null,
           },
         },
       };
@@ -698,6 +710,51 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           [action.threadId]: {
             ...withThreadStatusDefaults(previous),
             terminalPulse: nextPulse,
+            codexSilentSuspectedAt: null,
+            codexSilentSuspectedSource: null,
+          },
+        },
+      };
+    }
+    case "markCodexSilentSuspected": {
+      const previous = withThreadStatusDefaults(
+        state.threadStatusById[action.threadId],
+      );
+      if (
+        previous.codexSilentSuspectedAt === action.timestamp &&
+        previous.codexSilentSuspectedSource === action.source
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        threadStatusById: {
+          ...state.threadStatusById,
+          [action.threadId]: {
+            ...previous,
+            codexSilentSuspectedAt: action.timestamp,
+            codexSilentSuspectedSource: action.source,
+          },
+        },
+      };
+    }
+    case "clearCodexSilentSuspected": {
+      const previous = state.threadStatusById[action.threadId];
+      if (
+        !previous ||
+        (previous.codexSilentSuspectedAt == null &&
+          previous.codexSilentSuspectedSource == null)
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        threadStatusById: {
+          ...state.threadStatusById,
+          [action.threadId]: {
+            ...withThreadStatusDefaults(previous),
+            codexSilentSuspectedAt: null,
+            codexSilentSuspectedSource: null,
           },
         },
       };

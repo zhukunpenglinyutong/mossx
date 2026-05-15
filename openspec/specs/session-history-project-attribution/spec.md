@@ -1,7 +1,9 @@
 # session-history-project-attribution Specification
 
 ## Purpose
-TBD - created by archiving change global-session-history-archive-center. Update Purpose after archive.
+
+Defines the session-history-project-attribution behavior contract, covering The System SHALL Derive Project Attribution For Global Codex History.
+
 ## Requirements
 ### Requirement: The System SHALL Derive Project Attribution For Global Codex History
 

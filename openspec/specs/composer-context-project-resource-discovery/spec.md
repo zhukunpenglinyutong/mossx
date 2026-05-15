@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change composer-project-scope-skill-command-discovery. Update Purpose after archive.
+Defines the composer-context-project-resource-discovery behavior contract, covering Project-Scoped Skill Discovery.
 
 ## Requirements
 

@@ -1,7 +1,9 @@
 # settings-custom-theme-presets Specification
 
 ## Purpose
-TBD - created by archiving change add-settings-custom-theme-presets. Update Purpose after archive.
+
+Defines the settings-custom-theme-presets behavior contract, covering Settings MUST Expose A Dedicated Custom Theme Mode.
+
 ## Requirements
 ### Requirement: Settings MUST Expose A Dedicated Custom Theme Mode
 

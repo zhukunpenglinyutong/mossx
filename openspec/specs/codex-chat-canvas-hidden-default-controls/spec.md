@@ -1,7 +1,9 @@
 # codex-chat-canvas-hidden-default-controls Specification
 
 ## Purpose
-TBD - created by archiving change hide-codex-streaming-thinking-config-toggles. Update Purpose after archive.
+
+Defines the codex-chat-canvas-hidden-default-controls behavior contract, covering Codex Config Menu MUST Hide Streaming And Thinking Default Controls.
+
 ## Requirements
 ### Requirement: Codex Config Menu MUST Hide Streaming And Thinking Default Controls
 

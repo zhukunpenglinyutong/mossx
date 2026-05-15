@@ -1,7 +1,9 @@
 # detached-external-file-monitor-toast-control Specification
 
 ## Purpose
-TBD - created by archiving change fix-windows-external-file-monitor-toast-storm. Update Purpose after archive.
+
+Defines the detached-external-file-monitor-toast-control behavior contract, covering Missing Or Stale Paths MUST NOT Trigger Monitor-Unavailable Toasts.
+
 ## Requirements
 ### Requirement: Missing Or Stale Paths MUST NOT Trigger Monitor-Unavailable Toasts
 

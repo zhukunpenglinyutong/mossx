@@ -23,6 +23,8 @@ vi.mock("../../../utils/platform", () => ({
 import {
   completeThreadStreamTurn,
   getThreadStreamLatencySnapshot,
+  isStreamLatencyTraceEnabled,
+  noteThreadAppServerEventReceived,
   noteThreadDeltaReceived,
   noteThreadTextIngressReceived,
   noteThreadTurnStarted,
@@ -133,8 +135,12 @@ describe("streamLatencyDiagnostics", () => {
     const mitigation = resolveActiveThreadStreamMitigation(snapshot);
 
     expect(snapshot?.latencyCategory).toBe("render-amplification");
-    expect(snapshot?.candidateMitigationProfile).toBe("claude-windows-visible-stream");
-    expect(snapshot?.candidateMitigationReason).toBe("first-delta-visible-stream-candidate");
+    expect(snapshot?.candidateMitigationProfile).toBe(
+      "claude-windows-visible-stream",
+    );
+    expect(snapshot?.candidateMitigationReason).toBe(
+      "first-delta-visible-stream-candidate",
+    );
     expect(snapshot?.mitigationProfile).toBe("claude-windows-visible-stream");
     expect(snapshot?.mitigationReason).toBe("render-lag-after-first-delta");
     expect(mitigation?.id).toBe("claude-windows-visible-stream");
@@ -185,7 +191,9 @@ describe("streamLatencyDiagnostics", () => {
 
     const snapshot = getThreadStreamLatencySnapshot("thread-visible-stall");
 
-    expect(snapshot?.latencyCategory).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.latencyCategory).toBe(
+      "visible-output-stall-after-first-delta",
+    );
     expect(snapshot?.providerId).toBe("custom");
     expect(snapshot?.model).toBe("claude-sonnet-4.5");
     expect(snapshot?.lastVisibleTextItemId).toBe("assistant-visible-stall");
@@ -246,6 +254,7 @@ describe("streamLatencyDiagnostics", () => {
       mitigationProfile: null,
       mitigationReason: null,
       upstreamPendingReported: false,
+      firstTokenLatencyReported: false,
       renderAmplificationReported: false,
       visibleOutputStallReported: false,
       repeatTurnBlankingReported: false,
@@ -258,7 +267,9 @@ describe("streamLatencyDiagnostics", () => {
       visibleTextGrowthCount: 4,
     };
 
-    expect(shouldNotifyThreadStreamLatencySnapshotListeners(previous, next)).toBe(false);
+    expect(
+      shouldNotifyThreadStreamLatencySnapshotListeners(previous, next),
+    ).toBe(false);
   });
 
   it("classifies Gemini visible output stall without activating mitigation by default", async () => {
@@ -283,14 +294,21 @@ describe("streamLatencyDiagnostics", () => {
     });
     noteThreadDeltaReceived("thread-gemini-visible-stall", 4_220);
 
-    reportThreadVisibleOutputStallAfterFirstDelta("thread-gemini-visible-stall", {
-      stallAt: 4_950,
-      reason: "test-gemini-visible-gap",
-    });
+    reportThreadVisibleOutputStallAfterFirstDelta(
+      "thread-gemini-visible-stall",
+      {
+        stallAt: 4_950,
+        reason: "test-gemini-visible-gap",
+      },
+    );
 
-    const snapshot = getThreadStreamLatencySnapshot("thread-gemini-visible-stall");
+    const snapshot = getThreadStreamLatencySnapshot(
+      "thread-gemini-visible-stall",
+    );
 
-    expect(snapshot?.latencyCategory).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.latencyCategory).toBe(
+      "visible-output-stall-after-first-delta",
+    );
     expect(snapshot?.engine).toBe("gemini");
     expect(snapshot?.mitigationProfile).toBeNull();
     expect(resolveActiveThreadStreamMitigation(snapshot)).toBeNull();
@@ -348,8 +366,12 @@ describe("streamLatencyDiagnostics", () => {
 
     expect(snapshot?.candidateMitigationProfile).toBeNull();
     expect(snapshot?.mitigationProfile).toBe("claude-markdown-stream-recovery");
-    expect(snapshot?.mitigationReason).toBe("visible-output-stall-after-first-delta");
-    expect(snapshot?.latencyCategory).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.mitigationReason).toBe(
+      "visible-output-stall-after-first-delta",
+    );
+    expect(snapshot?.latencyCategory).toBe(
+      "visible-output-stall-after-first-delta",
+    );
     expect(mitigation?.id).toBe("claude-markdown-stream-recovery");
     expect(mitigation?.renderPlainTextWhileStreaming).toBe(true);
     expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
@@ -385,17 +407,26 @@ describe("streamLatencyDiagnostics", () => {
     });
     noteThreadDeltaReceived("thread-codex-visible-stall", 9_120);
 
-    reportThreadVisibleOutputStallAfterFirstDelta("thread-codex-visible-stall", {
-      stallAt: 9_920,
-      reason: "codex-visible-gap",
-    });
+    reportThreadVisibleOutputStallAfterFirstDelta(
+      "thread-codex-visible-stall",
+      {
+        stallAt: 9_920,
+        reason: "codex-visible-gap",
+      },
+    );
 
-    const snapshot = getThreadStreamLatencySnapshot("thread-codex-visible-stall");
+    const snapshot = getThreadStreamLatencySnapshot(
+      "thread-codex-visible-stall",
+    );
     const mitigation = resolveActiveThreadStreamMitigation(snapshot);
 
-    expect(snapshot?.latencyCategory).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.latencyCategory).toBe(
+      "visible-output-stall-after-first-delta",
+    );
     expect(snapshot?.mitigationProfile).toBe("codex-markdown-stream-recovery");
-    expect(snapshot?.mitigationReason).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.mitigationReason).toBe(
+      "visible-output-stall-after-first-delta",
+    );
     expect(mitigation?.id).toBe("codex-markdown-stream-recovery");
     expect(mitigation?.renderPlainTextWhileStreaming).toBeUndefined();
     expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
@@ -485,7 +516,9 @@ describe("streamLatencyDiagnostics", () => {
       renderAt: 6_040,
     });
 
-    const snapshot = getThreadStreamLatencySnapshot("thread-repeat-blanking-guard");
+    const snapshot = getThreadStreamLatencySnapshot(
+      "thread-repeat-blanking-guard",
+    );
 
     expect(snapshot?.latencyCategory).toBeNull();
     expect(snapshot?.repeatTurnBlankingReported).toBe(false);
@@ -625,9 +658,9 @@ describe("streamLatencyDiagnostics", () => {
     ).toBeNull();
 
     vi.advanceTimersByTime(1);
-    expect(getThreadStreamLatencySnapshot("thread-visible-timer")?.latencyCategory).toBe(
-      "visible-output-stall-after-first-delta",
-    );
+    expect(
+      getThreadStreamLatencySnapshot("thread-visible-timer")?.latencyCategory,
+    ).toBe("visible-output-stall-after-first-delta");
     expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
       "stream-latency/visible-output-stall-after-first-delta",
       expect.objectContaining({
@@ -648,7 +681,8 @@ describe("streamLatencyDiagnostics", () => {
     vi.advanceTimersByTime(1_000);
 
     expect(
-      getThreadStreamLatencySnapshot("thread-visible-timer-cleanup")?.latencyCategory,
+      getThreadStreamLatencySnapshot("thread-visible-timer-cleanup")
+        ?.latencyCategory,
     ).toBeNull();
   });
 
@@ -668,9 +702,11 @@ describe("streamLatencyDiagnostics", () => {
     });
     noteThreadDeltaReceived("thread-codex", 5_040);
 
-    expect(resolveActiveThreadStreamMitigation(
-      getThreadStreamLatencySnapshot("thread-codex"),
-    )).toBeNull();
+    expect(
+      resolveActiveThreadStreamMitigation(
+        getThreadStreamLatencySnapshot("thread-codex"),
+      ),
+    ).toBeNull();
 
     resetThreadStreamLatencyDiagnosticsForTests();
     mocks.isWindowsPlatform.mockReturnValue(false);
@@ -696,9 +732,11 @@ describe("streamLatencyDiagnostics", () => {
     });
     noteThreadDeltaReceived("thread-mac-claude", 5_540);
 
-    expect(resolveActiveThreadStreamMitigation(
-      getThreadStreamLatencySnapshot("thread-mac-claude"),
-    )).toBeNull();
+    expect(
+      resolveActiveThreadStreamMitigation(
+        getThreadStreamLatencySnapshot("thread-mac-claude"),
+      ),
+    ).toBeNull();
   });
 
   it("records codex completion ingress after a long visible gap", async () => {
@@ -731,7 +769,9 @@ describe("streamLatencyDiagnostics", () => {
       timestamp: 32_000,
     });
 
-    const snapshot = getThreadStreamLatencySnapshot("thread-codex-completion-gap");
+    const snapshot = getThreadStreamLatencySnapshot(
+      "thread-codex-completion-gap",
+    );
 
     expect(snapshot?.deltaCount).toBe(1);
     expect(snapshot?.lastDeltaAt).toBe(10_050);
@@ -782,7 +822,9 @@ describe("streamLatencyDiagnostics", () => {
       timestamp: 23_300,
     });
 
-    const snapshot = getThreadStreamLatencySnapshot("thread-codex-completion-dedupe");
+    const snapshot = getThreadStreamLatencySnapshot(
+      "thread-codex-completion-dedupe",
+    );
     const ingressDiagnostics = mocks.appendRendererDiagnostic.mock.calls.filter(
       ([eventName]) => eventName === "stream-latency/codex-text-ingress",
     );
@@ -866,9 +908,13 @@ describe("streamLatencyDiagnostics", () => {
 
     const snapshot = getThreadStreamLatencySnapshot("thread-disabled");
 
-    expect(snapshot?.candidateMitigationProfile).toBe("claude-windows-visible-stream");
+    expect(snapshot?.candidateMitigationProfile).toBe(
+      "claude-windows-visible-stream",
+    );
     expect(snapshot?.mitigationProfile).toBe("claude-windows-visible-stream");
-    expect(snapshot?.latencyCategory).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.latencyCategory).toBe(
+      "visible-output-stall-after-first-delta",
+    );
     expect(resolveActiveThreadStreamMitigation(snapshot)).toBeNull();
     expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
       "stream-latency/mitigation-activated",
@@ -929,12 +975,14 @@ describe("streamLatencyDiagnostics", () => {
   });
 
   it("clears stale provider fingerprint when a newer non-claude turn primes the same thread", async () => {
-    let resolveConfig: ((value: {
-      apiKey: string;
-      baseUrl: string;
-      providerId: string;
-      providerName: string;
-    }) => void) | null = null;
+    let resolveConfig:
+      | ((value: {
+          apiKey: string;
+          baseUrl: string;
+          providerId: string;
+          providerName: string;
+        }) => void)
+      | null = null;
     mocks.getCurrentClaudeConfig.mockReturnValueOnce(
       new Promise<{
         apiKey: string;
@@ -1001,7 +1049,9 @@ describe("streamLatencyDiagnostics", () => {
       model: "qwen3-max",
     });
 
-    mocks.getCurrentClaudeConfig.mockRejectedValueOnce(new Error("network down"));
+    mocks.getCurrentClaudeConfig.mockRejectedValueOnce(
+      new Error("network down"),
+    );
     await primeThreadStreamLatencyContext({
       workspaceId: "ws-1",
       threadId: "thread-5",
@@ -1016,5 +1066,276 @@ describe("streamLatencyDiagnostics", () => {
       providerName: null,
       baseUrl: null,
     });
+  });
+
+  it("records app-server stream timing only when the debug trace flag is enabled", async () => {
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        itemId: "assistant-trace",
+        delta: "secret text must not be logged",
+        ccguiTiming: {
+          source: "claude-stream",
+          stdoutReceivedAtMs: 1_000,
+          processSpawnStartedAtMs: 900,
+          processSpawnedAtMs: 910,
+          stdinWriteStartedAtMs: 915,
+          stdinClosedAtMs: 930,
+          turnStartedAtMs: 940,
+          firstStdoutLineAtMs: 1_000,
+          firstValidStreamEventAtMs: 1_005,
+          firstTextDeltaAtMs: 1_010,
+          sessionEmittedAtMs: 1_020,
+          forwarderReceivedAtMs: 1_030,
+          appServerEmittedAtMs: 1_040,
+          spawnToStdinClosedMs: 30,
+          stdinClosedToFirstStdoutMs: 70,
+          firstStdoutToFirstValidEventMs: 5,
+          firstValidEventToFirstTextDeltaMs: 5,
+          stdinClosedToFirstTextDeltaMs: 80,
+          stdoutToSessionEmitMs: 20,
+          sessionEmitToForwarderMs: 10,
+          forwarderToAppServerEmitMs: 10,
+          stdoutToAppServerEmitMs: 40,
+        },
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(mocks.appendRendererDiagnostic).not.toHaveBeenCalled();
+
+    const getItem = vi.fn((key: string) =>
+      key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+    );
+    vi.stubGlobal("window", {
+      localStorage: { getItem },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    expect(isStreamLatencyTraceEnabled()).toBe(true);
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        itemId: "assistant-trace",
+        delta: "secret text must not be logged",
+        ccguiTiming: {
+          source: "claude-stream",
+          stdoutReceivedAtMs: 1_000,
+          processSpawnStartedAtMs: 900,
+          processSpawnedAtMs: 910,
+          stdinWriteStartedAtMs: 915,
+          stdinClosedAtMs: 930,
+          turnStartedAtMs: 940,
+          firstStdoutLineAtMs: 1_000,
+          firstValidStreamEventAtMs: 1_005,
+          firstTextDeltaAtMs: 1_010,
+          sessionEmittedAtMs: 1_020,
+          forwarderReceivedAtMs: 1_030,
+          appServerEmittedAtMs: 1_040,
+          spawnToStdinClosedMs: 30,
+          stdinClosedToFirstStdoutMs: 70,
+          firstStdoutToFirstValidEventMs: 5,
+          firstValidEventToFirstTextDeltaMs: 5,
+          stdinClosedToFirstTextDeltaMs: 80,
+          stdoutToSessionEmitMs: 20,
+          sessionEmitToForwarderMs: 10,
+          forwarderToAppServerEmitMs: 10,
+          stdoutToAppServerEmitMs: 40,
+        },
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/app-server-event",
+      expect.objectContaining({
+        method: "item/agentMessage/delta",
+        itemId: "assistant-trace",
+        deltaLength: 30,
+        processSpawnStartedAtMs: 900,
+        processSpawnedAtMs: 910,
+        stdinClosedAtMs: 930,
+        firstStdoutLineAtMs: 1_000,
+        firstValidStreamEventAtMs: 1_005,
+        firstTextDeltaAtMs: 1_010,
+        spawnToStdinClosedMs: 30,
+        stdinClosedToFirstStdoutMs: 70,
+        firstStdoutToFirstValidEventMs: 5,
+        firstValidEventToFirstTextDeltaMs: 5,
+        stdinClosedToFirstTextDeltaMs: 80,
+        stdoutToSessionEmitMs: 20,
+        stdoutToAppServerEmitMs: 40,
+        appServerEmitToRendererMs: 50,
+        stdoutToRendererMs: 90,
+      }),
+    );
+    const payload = mocks.appendRendererDiagnostic.mock.calls.at(
+      -1,
+    )?.[1] as Record<string, unknown>;
+    expect(JSON.stringify(payload)).not.toContain("secret text");
+  });
+
+  it("classifies Claude first-token timing phases without activating visible-stall mitigation", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: vi.fn((key: string) =>
+          key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+        ),
+      },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/reasoning/textDelta",
+      params: {
+        threadId: "thread-first-token",
+        itemId: "reasoning-1",
+        ccguiTiming: {
+          source: "claude-stream",
+          processSpawnStartedAtMs: 900,
+          processSpawnedAtMs: 910,
+          stdinClosedAtMs: 930,
+          firstStdoutLineAtMs: 1_000,
+          firstValidStreamEventAtMs: 1_005,
+          sessionEmittedAtMs: 1_020,
+          forwarderReceivedAtMs: 1_030,
+          appServerEmittedAtMs: 1_040,
+          stdinClosedToFirstStdoutMs: 70,
+          firstStdoutToFirstValidEventMs: 5,
+        },
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(getThreadStreamLatencySnapshot("thread-first-token")).toMatchObject({
+      latencyCategory: "claude-valid-event-without-text",
+      mitigationProfile: null,
+      candidateMitigationProfile: null,
+      visibleOutputStallReported: false,
+    });
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/claude-first-token-phase",
+      expect.objectContaining({
+        latencyCategory: "claude-valid-event-without-text",
+        firstStdoutLineAtMs: 1_000,
+        firstValidStreamEventAtMs: 1_005,
+        firstTextDeltaAtMs: null,
+        firstStdoutToFirstValidEventMs: 5,
+      }),
+    );
+  });
+
+  it("ignores malformed app-server latency trace params", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: vi.fn((key: string) =>
+          key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+        ),
+      },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: null,
+      receivedAt: 1_090,
+    });
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: "not-an-object",
+      receivedAt: 1_090,
+    });
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        ccguiTiming: "not-an-object",
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(mocks.appendRendererDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it("normalizes invalid app-server latency trace numbers without negative gaps", () => {
+    vi.spyOn(Date, "now").mockReturnValue(2_000);
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: vi.fn((key: string) =>
+          key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+        ),
+      },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        itemId: "assistant-trace",
+        delta: "visible delta",
+        ccguiTiming: {
+          source: "claude-stream",
+          stdoutReceivedAtMs: -1,
+          processSpawnStartedAtMs: Number.NaN,
+          processSpawnedAtMs: Number.POSITIVE_INFINITY,
+          stdinClosedAtMs: -930,
+          firstStdoutLineAtMs: "bad",
+          firstValidStreamEventAtMs: Number.NEGATIVE_INFINITY,
+          firstTextDeltaAtMs: -1,
+          sessionEmittedAtMs: Number.POSITIVE_INFINITY,
+          forwarderReceivedAtMs: Number.NaN,
+          appServerEmittedAtMs: 3_000,
+          spawnToStdinClosedMs: -30,
+          stdinClosedToFirstStdoutMs: Number.NaN,
+          firstStdoutToFirstValidEventMs: Number.POSITIVE_INFINITY,
+          firstValidEventToFirstTextDeltaMs: "5",
+          stdinClosedToFirstTextDeltaMs: -80,
+          stdoutToSessionEmitMs: -20,
+          sessionEmitToForwarderMs: Number.NaN,
+          forwarderToAppServerEmitMs: Number.POSITIVE_INFINITY,
+          stdoutToAppServerEmitMs: "40",
+        },
+      },
+      receivedAt: "bad-clock",
+    });
+
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/app-server-event",
+      expect.objectContaining({
+        stdoutReceivedAtMs: null,
+        processSpawnStartedAtMs: null,
+        processSpawnedAtMs: null,
+        stdinClosedAtMs: null,
+        firstStdoutLineAtMs: null,
+        firstValidStreamEventAtMs: null,
+        firstTextDeltaAtMs: null,
+        sessionEmittedAtMs: null,
+        forwarderReceivedAtMs: null,
+        appServerEmittedAtMs: 3_000,
+        rendererReceivedAtMs: 2_000,
+        spawnToStdinClosedMs: null,
+        stdinClosedToFirstStdoutMs: null,
+        firstStdoutToFirstValidEventMs: null,
+        firstValidEventToFirstTextDeltaMs: null,
+        stdinClosedToFirstTextDeltaMs: null,
+        stdoutToSessionEmitMs: null,
+        sessionEmitToForwarderMs: null,
+        forwarderToAppServerEmitMs: null,
+        stdoutToAppServerEmitMs: null,
+        appServerEmitToRendererMs: 0,
+        stdoutToRendererMs: null,
+      }),
+    );
   });
 });

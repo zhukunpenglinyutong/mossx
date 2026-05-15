@@ -1,7 +1,9 @@
 # composer-drag-drop-file-reference Specification
 
 ## Purpose
-TBD - created by archiving change chat-support-drag-drop-files-folders. Update Purpose after archive.
+
+Defines the composer-drag-drop-file-reference behavior contract, covering Composer SHALL Accept File Tree Drag-Drop For File And Folder References.
+
 ## Requirements
 ### Requirement: Composer SHALL Accept File Tree Drag-Drop For File And Folder References
 The system SHALL allow users to drag file-tree nodes (files or folders) into Composer input and SHALL convert them into file-reference tokens using existing reference format.

@@ -1,7 +1,9 @@
 # persistent-state-governance Specification
 
 ## Purpose
-TBD - created by archiving change phase1-architecture-hardening. Update Purpose after archive.
+
+Defines the persistent-state-governance behavior contract, covering Persistent State MUST Have Explicit Ownership And Schema Boundaries.
+
 ## Requirements
 ### Requirement: Persistent State MUST Have Explicit Ownership And Schema Boundaries
 第一阶段涉及的 client persistent state MUST 为每个 store 定义明确的 ownership、schema 与 evolution boundary。

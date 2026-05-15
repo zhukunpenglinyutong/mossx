@@ -1,7 +1,9 @@
 # kanban-task-scheduling Specification
 
 ## Purpose
-TBD - created by archiving change add-kanban-scheduled-and-chained-tasks. Update Purpose after archive.
+
+Defines the kanban-task-scheduling behavior contract, covering Kanban Task SHALL Support Additive Scheduling Metadata.
+
 ## Requirements
 ### Requirement: Kanban Task SHALL Support Additive Scheduling Metadata
 

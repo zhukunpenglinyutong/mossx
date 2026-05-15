@@ -1,7 +1,9 @@
 # workspace-note-card-pool Specification
 
 ## Purpose
-TBD - created by archiving change add-workspace-note-card-pool. Update Purpose after archive.
+
+Defines the workspace-note-card-pool behavior contract, covering Right Panel MUST Provide A Note Card Entry.
+
 ## Requirements
 ### Requirement: Right Panel MUST Provide A Note Card Entry
 

@@ -1,7 +1,9 @@
 # git-branch-command-extraction-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-git-branch-commands. Update Purpose after archive.
+
+Defines the git-branch-command-extraction-compatibility behavior contract, covering Git Branch Command Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Git Branch Command Extraction Compatibility
 The system SHALL preserve the effective git branch command contract and command routing when branch lifecycle and compare commands are moved out of `git/commands.rs` into a dedicated submodule.

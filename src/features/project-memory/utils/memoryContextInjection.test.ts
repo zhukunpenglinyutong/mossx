@@ -15,21 +15,23 @@ import {
 } from "./memoryContextInjection";
 
 function makeScored(kind: string, summary: string, extras?: Partial<ScoredMemory>): ScoredMemory {
+  const memoryOverrides: Partial<ScoredMemory["memory"]> = extras?.memory ?? {};
   return {
     memory: {
-      id: extras?.memory?.id ?? "m-1",
+      id: memoryOverrides.id ?? "m-1",
       workspaceId: "ws-1",
       kind,
-      title: extras?.memory?.title ?? summary,
+      title: memoryOverrides.title ?? summary,
       summary,
-      detail: (extras?.memory as { detail?: string | null } | undefined)?.detail ?? null,
+      detail: (memoryOverrides as { detail?: string | null }).detail ?? null,
       cleanText: summary,
-      tags: extras?.memory?.tags ?? [],
-      importance: extras?.memory?.importance ?? "high",
+      tags: memoryOverrides.tags ?? [],
+      importance: memoryOverrides.importance ?? "high",
       source: "auto",
       fingerprint: "fp",
-      createdAt: extras?.memory?.createdAt ?? 1000,
-      updatedAt: extras?.memory?.updatedAt ?? 1000,
+      createdAt: memoryOverrides.createdAt ?? 1000,
+      updatedAt: memoryOverrides.updatedAt ?? 1000,
+      ...memoryOverrides,
     },
     relevanceScore: extras?.relevanceScore ?? 0.5,
   } as ScoredMemory;
@@ -73,6 +75,55 @@ describe("scoreMemoryRelevance", () => {
     );
     expect(score).toBe(0);
   });
+
+  it("scores canonical conversation fields beyond summary preview", () => {
+    const score = scoreMemoryRelevance(
+      {
+        title: "旧摘要",
+        summary: "UI preview",
+        tags: [],
+        userInput: "怎么配置 JWT",
+        assistantResponse: "Spring Security 使用 jjwt 处理 token",
+        detail: "fallback detail",
+      },
+      normalizeQueryTerms("Spring Security JWT token"),
+    );
+    expect(score).toBeGreaterThan(0.5);
+  });
+
+  it("scores identity recall from user-owned fields", () => {
+    const score = scoreMemoryRelevance(
+      {
+        title: "身份介绍",
+        summary: "用户介绍了自己的姓名",
+        tags: ["identity"],
+        userInput: "我是陈湘宁你是谁你有什么能力",
+        assistantResponse: "我是 Codex，你的工程协作伙伴。",
+        cleanText: "我是陈湘宁你是谁你有什么能力",
+      },
+      normalizeQueryTerms("我是谁"),
+      { queryText: "我是谁" },
+    );
+
+    expect(score).toBe(1);
+  });
+
+  it("does not treat assistant self-introduction as user identity evidence", () => {
+    const score = scoreMemoryRelevance(
+      {
+        title: "助手能力介绍",
+        summary: "用户询问助手是谁",
+        tags: ["identity"],
+        userInput: "你是谁",
+        assistantResponse: "我是 Codex，你的工程协作伙伴。",
+        cleanText: "你是谁 我是 Codex，你的工程协作伙伴。",
+      },
+      normalizeQueryTerms("我是谁"),
+      { queryText: "我是谁" },
+    );
+
+    expect(score).toBeLessThan(1);
+  });
 });
 
 describe("selectContextMemories", () => {
@@ -111,6 +162,23 @@ describe("selectContextMemories", () => {
       }),
     );
     expect(selectContextMemories(items).length).toBe(MAX_INJECT_COUNT);
+  });
+
+  it("can prefer relevance over importance for exact recall intent", () => {
+    const items: ScoredMemory[] = [
+      makeScored("conversation", "low identity", {
+        memory: { id: "identity", importance: "low", updatedAt: 1 } as any,
+        relevanceScore: 1,
+      }),
+      makeScored("known_issue", "high partial", {
+        memory: { id: "partial", importance: "high", updatedAt: 2 } as any,
+        relevanceScore: 0.5,
+      }),
+    ];
+
+    const selected = selectContextMemories(items, { preferRelevanceOverImportance: true });
+
+    expect(selected[0]?.memory.id).toBe("identity");
   });
 });
 
@@ -298,7 +366,7 @@ describe("injectSelectedMemoriesContext", () => {
     expect(result.finalText).toContain("请继续");
   });
 
-  it("supports summary mode for selected memory injection", () => {
+  it("keeps selected memory model-facing injection detailed even when preview uses summary mode", () => {
     const memory = makeScored("note", "仅摘要内容", {
       memory: { id: "manual-2", detail: "这段 detail 不应被注入" } as any,
     }).memory;
@@ -308,8 +376,32 @@ describe("injectSelectedMemoriesContext", () => {
       mode: "summary",
     });
     expect(result.finalText).toContain("仅摘要内容");
-    expect(result.finalText).not.toContain("这段 detail 不应被注入");
+    expect(result.finalText).toContain("这段 detail 不应被注入");
     expect(result.previewText).toContain("仅摘要内容");
+  });
+
+  it("injects conversation turn memory from canonical user input and assistant response", () => {
+    const memory = makeScored("conversation", "摘要投影", {
+      memory: {
+        id: "turn-1",
+        recordKind: "conversation_turn",
+        source: "conversation_turn",
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+        userInput: "完整用户输入",
+        assistantResponse: "完整 AI 回复",
+        detail: null,
+        cleanText: "旧投影",
+      } as any,
+    }).memory;
+    const result = injectSelectedMemoriesContext({
+      userText: "继续",
+      memories: [memory],
+      mode: "detail",
+    });
+    expect(result.finalText).toContain("完整用户输入");
+    expect(result.finalText).toContain("完整 AI 回复");
+    expect(result.finalText).not.toContain("旧投影");
   });
 
   it("returns manual_empty when selection is empty", () => {

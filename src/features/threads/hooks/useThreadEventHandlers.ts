@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import { useTranslation } from "react-i18next";
 import type {
   AppServerEvent,
   CollaborationModeBlockedRequest,
@@ -121,7 +120,8 @@ type TurnDiagnosticState = {
   itemEventCount: number;
   progressSequence: number;
   stallReported: boolean;
-  noProgressSettled: boolean;
+  noProgressSuspectedAt: number | null;
+  noProgressSuspectedSource: string | null;
 };
 
 type CodexQuarantinedTurn = {
@@ -409,7 +409,8 @@ function createTurnDiagnosticState(
     itemEventCount: 0,
     progressSequence: 0,
     stallReported: false,
-    noProgressSettled: false,
+    noProgressSuspectedAt: null,
+    noProgressSuspectedSource: null,
   };
 }
 
@@ -509,6 +510,7 @@ type ThreadEventHandlersOptions = {
   onAgentMessageCompletedExternal?: (payload: {
     workspaceId: string;
     threadId: string;
+    turnId?: string | null;
     itemId: string;
     text: string;
   }) => void;
@@ -603,13 +605,11 @@ export function useThreadEventHandlers({
   onCollaborationModeResolved,
   onExitPlanModeToolCompleted,
 }: ThreadEventHandlersOptions) {
-  const { t } = useTranslation();
   const threadLifecycleSnapshotRef = useRef<Map<string, ThreadLifecycleSnapshot>>(new Map());
   const turnDiagnosticsRef = useRef<Map<string, TurnDiagnosticState>>(new Map());
   const turnFirstDeltaTimerRef = useRef<Map<string, number>>(new Map());
   const turnStallTimerRef = useRef<Map<string, number>>(new Map());
   const codexNoProgressTimerRef = useRef<Map<string, number>>(new Map());
-  const settleCodexNoProgressTurnRef = useRef<((threadId: string) => void) | null>(null);
   const flushDeferredTurnCompletionRef = useRef<
     ((threadId: string, source: DeferredCompletionFlushSource) => void) | null
   >(null);
@@ -682,13 +682,60 @@ export function useThreadEventHandlers({
     codexNoProgressTimerRef.current.delete(threadId);
   }, []);
 
+  const markCodexNoProgressSuspected = useCallback(
+    (threadId: string, diagnostic: TurnDiagnosticState, elapsedSinceProgressMs: number) => {
+      if (diagnostic.noProgressSuspectedAt !== null) {
+        return;
+      }
+      const now = Date.now();
+      const timeoutMs = getCodexNoProgressTimeoutMs(diagnostic);
+      const activeExecutionItemTypes = listActiveExecutionItemTypes(diagnostic);
+      const lifecycle = getThreadLifecycleSnapshot(threadId);
+      diagnostic.noProgressSuspectedAt = now;
+      diagnostic.noProgressSuspectedSource = "frontend-no-progress-suspected";
+      dispatch({
+        type: "markCodexSilentSuspected",
+        threadId,
+        timestamp: now,
+        source: "frontend-no-progress-suspected",
+      });
+      emitTurnDiagnostic("codex-no-progress-suspected", {
+        ...buildCodexLivenessDiagnostic({
+          workspaceId: diagnostic.workspaceId,
+          threadId,
+          stage: "suspected-silent",
+          outcome: "recoverable",
+          source: "frontend-no-progress-suspected",
+          reason: "frontend observed no Codex progress before the watchdog window",
+          turnId: diagnostic.turnId,
+          lastEventAgeMs: elapsedSinceProgressMs,
+        }),
+        turnId: diagnostic.turnId,
+        elapsedMs: Math.max(0, now - diagnostic.startedAt),
+        elapsedSinceProgressMs,
+        timeoutMs,
+        lastProgressSource: diagnostic.lastProgressSource,
+        progressSequence: diagnostic.progressSequence,
+        activeExecutionItemCount: diagnostic.activeExecutionItems.size,
+        activeExecutionItemTypes,
+        isProcessing: lifecycle.isProcessing,
+        activeTurnId: lifecycle.activeTurnId,
+        diagnosticCategory: "codex-no-progress",
+        terminal: false,
+        quarantine: false,
+        ...buildThreadStreamCorrelationDimensions(threadId),
+      }, { force: true });
+    },
+    [dispatch, emitTurnDiagnostic, getThreadLifecycleSnapshot],
+  );
+
   const scheduleCodexNoProgressTimer = useCallback(
     (threadId: string) => {
       if (typeof window === "undefined" || inferThreadEngine(threadId) !== "codex") {
         return;
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
-      if (!diagnostic || diagnostic.noProgressSettled) {
+      if (!diagnostic) {
         return;
       }
       clearCodexNoProgressTimer(threadId);
@@ -700,7 +747,6 @@ export function useThreadEventHandlers({
         const latestDiagnostic = turnDiagnosticsRef.current.get(threadId);
         if (
           !latestDiagnostic ||
-          latestDiagnostic.noProgressSettled ||
           latestDiagnostic.completedAt !== null ||
           latestDiagnostic.errorAt !== null ||
           interruptedThreadsRef.current.has(threadId)
@@ -720,40 +766,19 @@ export function useThreadEventHandlers({
         if (elapsedSinceProgressMs < timeoutMs) {
           return;
         }
-        latestDiagnostic.noProgressSettled = true;
-        const activeExecutionItemTypes = listActiveExecutionItemTypes(latestDiagnostic);
-        emitTurnDiagnostic("codex-no-progress-stalled", {
-          ...buildCodexLivenessDiagnostic({
-            workspaceId: latestDiagnostic.workspaceId,
-            threadId,
-            stage: "stalled",
-            outcome: "failed",
-            source: latestDiagnostic.lastProgressSource,
-            reason: "codex foreground turn exceeded no-progress timeout",
-            turnId: latestDiagnostic.turnId,
-            lastEventAgeMs: elapsedSinceProgressMs,
-          }),
-          turnId: latestDiagnostic.turnId,
-          elapsedMs: Math.max(0, now - latestDiagnostic.startedAt),
+        markCodexNoProgressSuspected(
+          threadId,
+          latestDiagnostic,
           elapsedSinceProgressMs,
-          timeoutMs,
-          progressSequence: latestDiagnostic.progressSequence,
-          activeExecutionItemCount: latestDiagnostic.activeExecutionItems.size,
-          activeExecutionItemTypes,
-          isProcessing: lifecycle.isProcessing,
-          activeTurnId: lifecycle.activeTurnId,
-          diagnosticCategory: "codex-no-progress",
-          ...buildThreadStreamCorrelationDimensions(threadId),
-        }, { force: true });
-        settleCodexNoProgressTurnRef.current?.(threadId);
+        );
       }, delayMs);
       codexNoProgressTimerRef.current.set(threadId, timerId);
     },
     [
       clearCodexNoProgressTimer,
-      emitTurnDiagnostic,
       getThreadLifecycleSnapshot,
       interruptedThreadsRef,
+      markCodexNoProgressSuspected,
     ],
   );
 
@@ -763,15 +788,51 @@ export function useThreadEventHandlers({
         return;
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
-      if (!diagnostic || diagnostic.noProgressSettled) {
+      if (!diagnostic) {
         return;
       }
+      const wasSuspected = diagnostic.noProgressSuspectedAt !== null;
+      const suspectedDurationMs =
+        diagnostic.noProgressSuspectedAt === null
+          ? null
+          : Math.max(0, Date.now() - diagnostic.noProgressSuspectedAt);
       diagnostic.lastProgressAt = Date.now();
       diagnostic.lastProgressSource = source;
       diagnostic.progressSequence += 1;
+      diagnostic.noProgressSuspectedAt = null;
+      diagnostic.noProgressSuspectedSource = null;
+      if (wasSuspected) {
+        dispatch({ type: "clearCodexSilentSuspected", threadId });
+        const lifecycle = getThreadLifecycleSnapshot(threadId);
+        emitTurnDiagnostic("codex-no-progress-recovered", {
+          ...buildCodexLivenessDiagnostic({
+            workspaceId: diagnostic.workspaceId,
+            threadId,
+            stage: "active",
+            outcome: "recovered",
+            source,
+            reason: "matching Codex progress arrived after frontend no-progress suspicion",
+            turnId: diagnostic.turnId,
+          }),
+          turnId: diagnostic.turnId,
+          progressSource: source,
+          suspectedDurationMs,
+          progressSequence: diagnostic.progressSequence,
+          isProcessing: lifecycle.isProcessing,
+          activeTurnId: lifecycle.activeTurnId,
+          diagnosticCategory: "codex-no-progress",
+          ...buildThreadStreamCorrelationDimensions(threadId),
+        }, { force: true });
+      }
       scheduleCodexNoProgressTimer(threadId);
     },
-    [interruptedThreadsRef, scheduleCodexNoProgressTimer],
+    [
+      emitTurnDiagnostic,
+      dispatch,
+      getThreadLifecycleSnapshot,
+      interruptedThreadsRef,
+      scheduleCodexNoProgressTimer,
+    ],
   );
 
   const scheduleFirstDeltaTimer = useCallback(
@@ -1352,7 +1413,7 @@ export function useThreadEventHandlers({
     onTurnStarted,
     onTurnCompleted,
     onTurnPlanUpdated,
-    onThreadTokenUsageUpdated,
+    onThreadTokenUsageUpdated: onThreadTokenUsageUpdatedBase,
     onAccountRateLimitsUpdated,
     onTurnError,
     onTurnStalled,
@@ -1386,6 +1447,14 @@ export function useThreadEventHandlers({
     onDebug,
   });
 
+  const onThreadTokenUsageUpdatedTracked = useCallback(
+    (workspaceId: string, threadId: string, tokenUsage: Record<string, unknown>) => {
+      onThreadTokenUsageUpdatedBase(workspaceId, threadId, tokenUsage);
+      noteCodexTurnProgressEvidence(threadId, "thread-token-usage");
+    },
+    [noteCodexTurnProgressEvidence, onThreadTokenUsageUpdatedBase],
+  );
+
   const onBackgroundThreadAction = useCallback(
     (workspaceId: string, threadId: string, action: string) => {
       if (action !== "hide") {
@@ -1403,9 +1472,10 @@ export function useThreadEventHandlers({
       }
       dispatch({ type: "markHeartbeat", threadId, pulse });
       dispatch({ type: "markContinuationEvidence", threadId });
+      noteCodexTurnProgressEvidence(threadId, "processing-heartbeat");
       safeMessageActivity();
     },
-    [dispatch, safeMessageActivity],
+    [dispatch, noteCodexTurnProgressEvidence, safeMessageActivity],
   );
 
   const onTurnStartedTracked = useCallback(
@@ -1425,6 +1495,7 @@ export function useThreadEventHandlers({
         threadId,
         createTurnDiagnosticState(workspaceId, threadId, turnId, startedAt),
       );
+      dispatch({ type: "clearCodexSilentSuspected", threadId });
       scheduleFirstDeltaTimer(threadId);
       scheduleCodexNoProgressTimer(threadId);
       onTurnStarted(workspaceId, threadId, turnId);
@@ -2168,25 +2239,6 @@ export function useThreadEventHandlers({
     ],
   );
 
-  settleCodexNoProgressTurnRef.current = (threadId: string) => {
-    const diagnostic = turnDiagnosticsRef.current.get(threadId);
-    if (!diagnostic) {
-      return;
-    }
-    const timeoutMs = getCodexNoProgressTimeoutMs(diagnostic);
-    onTurnStalledTracked(diagnostic.workspaceId, threadId, diagnostic.turnId, {
-      message: t("threads.codexNoProgressStalled", {
-        seconds: String(Math.round(timeoutMs / 1000)),
-      }),
-      reasonCode: "codex_no_progress_timeout",
-      stage: "stalled",
-      source: "codex-foreground-no-progress",
-      startedAtMs: diagnostic.startedAt,
-      timeoutMs,
-      engine: "codex",
-    });
-  };
-
   const onAppServerEvent = useCallback(
     (event: AppServerEvent) => {
       const method = String(event.message?.method ?? "");
@@ -2220,6 +2272,34 @@ export function useThreadEventHandlers({
             label: "stderr/raw",
             payload: stripBackendErrorPrefix(rawMessage),
           });
+        }
+      }
+
+      if (
+        method === "thread/status/changed" ||
+        method === "runtime/status/changed" ||
+        method === "thread/status"
+      ) {
+        const threadId = asString(params.threadId ?? params.thread_id).trim();
+        const eventTurnId = asString(params.turnId ?? params.turn_id).trim();
+        const status = asString(params.status ?? params.state ?? params.phase)
+          .trim()
+          .toLowerCase();
+        const diagnosticTurnId = turnDiagnosticsRef.current.get(threadId)?.turnId ?? null;
+        const activeTurnId = getThreadLifecycleSnapshot(threadId).activeTurnId;
+        const expectedTurnId = diagnosticTurnId ?? activeTurnId;
+        if (
+          threadId &&
+          eventTurnId &&
+          expectedTurnId === eventTurnId &&
+          (
+            status === "active" ||
+            status === "running" ||
+            status === "processing" ||
+            status === "alive"
+          )
+        ) {
+          noteCodexTurnProgressEvidence(threadId, `status:${status}`);
         }
       }
 
@@ -2321,7 +2401,9 @@ export function useThreadEventHandlers({
       });
     },
     [
+      getThreadLifecycleSnapshot,
       onDebug,
+      noteCodexTurnProgressEvidence,
     ],
   );
 
@@ -2351,7 +2433,7 @@ export function useThreadEventHandlers({
       onTurnCompleted: onTurnCompletedTracked,
       onProcessingHeartbeat,
       onTurnPlanUpdated,
-      onThreadTokenUsageUpdated,
+      onThreadTokenUsageUpdated: onThreadTokenUsageUpdatedTracked,
       onAccountRateLimitsUpdated,
       onTurnError: onTurnErrorTracked,
       onTurnStalled: onTurnStalledTracked,
@@ -2385,7 +2467,7 @@ export function useThreadEventHandlers({
       onTurnCompletedTracked,
       onProcessingHeartbeat,
       onTurnPlanUpdated,
-      onThreadTokenUsageUpdated,
+      onThreadTokenUsageUpdatedTracked,
       onAccountRateLimitsUpdated,
       onTurnErrorTracked,
       onTurnStalledTracked,

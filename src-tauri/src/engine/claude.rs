@@ -10,7 +10,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
@@ -58,6 +58,54 @@ use stream_helpers::{
 pub struct ClaudeTurnEvent {
     pub turn_id: String,
     pub event: EngineEvent,
+    pub stream_timing: Option<ClaudeStreamTiming>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClaudeStreamTiming {
+    pub(crate) stdout_received_at_ms: Option<u64>,
+    pub(crate) process_spawn_started_at_ms: Option<u64>,
+    pub(crate) process_spawned_at_ms: Option<u64>,
+    pub(crate) stdin_write_started_at_ms: Option<u64>,
+    pub(crate) stdin_closed_at_ms: Option<u64>,
+    pub(crate) turn_started_at_ms: Option<u64>,
+    pub(crate) first_stdout_line_at_ms: Option<u64>,
+    pub(crate) first_valid_stream_event_at_ms: Option<u64>,
+    pub(crate) first_text_delta_at_ms: Option<u64>,
+    pub(crate) session_emitted_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ClaudeStreamStartupTiming {
+    process_spawn_started_at_ms: Option<u64>,
+    process_spawned_at_ms: Option<u64>,
+    stdin_write_started_at_ms: Option<u64>,
+    stdin_closed_at_ms: Option<u64>,
+    turn_started_at_ms: Option<u64>,
+    first_stdout_line_at_ms: Option<u64>,
+    first_valid_stream_event_at_ms: Option<u64>,
+    first_text_delta_at_ms: Option<u64>,
+}
+
+impl ClaudeStreamStartupTiming {
+    fn to_stream_timing(
+        &self,
+        stdout_received_at_ms: Option<u64>,
+        session_emitted_at_ms: u64,
+    ) -> ClaudeStreamTiming {
+        ClaudeStreamTiming {
+            stdout_received_at_ms,
+            process_spawn_started_at_ms: self.process_spawn_started_at_ms,
+            process_spawned_at_ms: self.process_spawned_at_ms,
+            stdin_write_started_at_ms: self.stdin_write_started_at_ms,
+            stdin_closed_at_ms: self.stdin_closed_at_ms,
+            turn_started_at_ms: self.turn_started_at_ms,
+            first_stdout_line_at_ms: self.first_stdout_line_at_ms,
+            first_valid_stream_event_at_ms: self.first_valid_stream_event_at_ms,
+            first_text_delta_at_ms: self.first_text_delta_at_ms,
+            session_emitted_at_ms,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -77,23 +125,44 @@ struct PendingClaudeToolSummary {
 const RETRYABLE_PROMPT_TOO_LONG_PREFIX: &str = "__claude_retryable_prompt_too_long__:";
 const AUTO_COMPACT_SIGNAL_SOURCE: &str = "auto_compact_retry";
 const CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS: u64 = 32;
+#[cfg(not(test))]
+const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(90);
+#[cfg(test)]
+const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(10);
+const CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT: usize = 800;
 const CLAUDE_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, Default)]
 struct BufferedClaudeTextDelta {
     text: String,
     started_at: Option<Instant>,
+    first_stdout_received_at_ms: Option<u64>,
+    stream_startup_timing: Option<ClaudeStreamStartupTiming>,
 }
 
 impl BufferedClaudeTextDelta {
+    #[cfg(test)]
     fn push(&mut self, delta: &str) {
+        self.push_with_timing(delta, None);
+    }
+
+    fn push_with_timing(&mut self, delta: &str, stdout_received_at_ms: Option<u64>) {
         if delta.is_empty() {
             return;
         }
         if self.started_at.is_none() {
             self.started_at = Some(Instant::now());
         }
+        if self.first_stdout_received_at_ms.is_none() {
+            self.first_stdout_received_at_ms = stdout_received_at_ms;
+        }
         self.text.push_str(delta);
+    }
+
+    fn set_stream_startup_timing(&mut self, timing: &ClaudeStreamStartupTiming) {
+        if self.stream_startup_timing.is_none() {
+            self.stream_startup_timing = Some(timing.clone());
+        }
     }
 
     fn is_empty(&self) -> bool {
@@ -111,14 +180,38 @@ impl BufferedClaudeTextDelta {
         window.checked_sub(started_at.elapsed())
     }
 
+    #[cfg(test)]
     fn take(&mut self) -> Option<String> {
+        self.take_with_timing().map(|emission| emission.text)
+    }
+
+    fn take_with_timing(&mut self) -> Option<BufferedClaudeTextDeltaEmission> {
         if self.text.is_empty() {
             self.started_at = None;
+            self.first_stdout_received_at_ms = None;
             return None;
         }
         self.started_at = None;
-        Some(std::mem::take(&mut self.text))
+        Some(BufferedClaudeTextDeltaEmission {
+            text: std::mem::take(&mut self.text),
+            stdout_received_at_ms: self.first_stdout_received_at_ms.take(),
+            stream_startup_timing: self.stream_startup_timing.take(),
+        })
     }
+}
+
+#[derive(Debug)]
+struct BufferedClaudeTextDeltaEmission {
+    text: String,
+    stdout_received_at_ms: Option<u64>,
+    stream_startup_timing: Option<ClaudeStreamStartupTiming>,
+}
+
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
 }
 
 /// Claude Code session for a workspace
@@ -233,6 +326,157 @@ impl ClaudeSession {
                 || normalized.contains("not supported"))
     }
 
+    fn push_stream_diagnostic_sample(sample: &mut String, text: &str) {
+        if sample.len() >= CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT {
+            return;
+        }
+        let remaining = CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT - sample.len();
+        if text.len() <= remaining {
+            sample.push_str(text);
+            return;
+        }
+
+        let mut end = 0;
+        for (index, _) in text.char_indices() {
+            if index > remaining {
+                break;
+            }
+            end = index;
+        }
+        if end == 0 {
+            return;
+        }
+        sample.push_str(&text[..end]);
+    }
+
+    fn build_stream_no_event_timeout_error(diagnostic_sample: &str) -> String {
+        let base = format!(
+            "Claude stream-json startup timed out after {}s without a valid stream event",
+            CLAUDE_STREAM_FIRST_EVENT_TIMEOUT.as_secs()
+        );
+        let sample = diagnostic_sample.trim();
+        if sample.is_empty() {
+            return format!("{base}. No stdout/stderr diagnostics were observed.");
+        }
+        format!("{base}. Diagnostic sample:\n{}", sample)
+    }
+
+    fn build_process_exit_error(
+        status: std::process::ExitStatus,
+        error_output: &str,
+        diagnostic_sample: &str,
+        use_stream_json_input: bool,
+        include_hook_events: bool,
+        access_mode: Option<&str>,
+    ) -> String {
+        let detail = error_output.trim();
+        if !detail.is_empty() {
+            return detail.to_string();
+        }
+
+        let sample = diagnostic_sample.trim();
+        let diagnostic_detail = if sample.is_empty() {
+            "No stdout/stderr diagnostics were observed.".to_string()
+        } else {
+            format!("Diagnostic sample:\n{sample}")
+        };
+
+        format!(
+            "Claude exited with status: {status}. Diagnostics: input_format={}, include_hook_events={}, permission_mode={}. {diagnostic_detail}",
+            if use_stream_json_input { "stream-json" } else { "argv" },
+            include_hook_events,
+            access_mode.unwrap_or("current"),
+        )
+    }
+
+    fn stream_diagnostic_sample_snapshot(sample: &Arc<StdMutex<String>>) -> String {
+        sample.lock().map(|value| value.clone()).unwrap_or_default()
+    }
+
+    fn is_valid_claude_stream_event(event: &Value) -> bool {
+        matches!(
+            event.get("type").and_then(|value| value.as_str()),
+            Some(
+                "stream_event"
+                    | "system"
+                    | "assistant"
+                    | "assistant_message_delta"
+                    | "message_delta"
+                    | "text_delta"
+                    | "output_text_delta"
+                    | "assistant_message"
+                    | "message"
+                    | "user"
+                    | "result"
+                    | "reasoning_delta"
+                    | "thinking_delta"
+                    | "error"
+                    | "tool_use"
+                    | "tool_result"
+            )
+        )
+    }
+
+    async fn fail_stream_no_event_timeout(
+        &self,
+        turn_id: &str,
+        diagnostic_sample: Arc<StdMutex<String>>,
+        mut stderr_handle: tokio::task::JoinHandle<String>,
+    ) -> Result<String, String> {
+        let mut child = {
+            let mut active = self.active_processes.lock().await;
+            active.remove(turn_id)
+        };
+        if let Some(mut child_proc) = child.take() {
+            if let Err(error) = self.terminate_child_process(turn_id, &mut child_proc).await {
+                log::warn!(
+                    "[claude] failed to terminate stream-timeout child for turn={}: {}",
+                    turn_id,
+                    error
+                );
+            }
+        }
+        tokio::select! {
+            _ = &mut stderr_handle => {}
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {
+                stderr_handle.abort();
+            }
+        }
+        let error_msg = Self::build_stream_no_event_timeout_error(
+            &Self::stream_diagnostic_sample_snapshot(&diagnostic_sample),
+        );
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnError {
+                workspace_id: self.workspace_id.clone(),
+                error: error_msg.clone(),
+                code: Some("claude_stream_no_event_timeout".to_string()),
+            },
+        );
+        self.clear_turn_ephemeral_state(turn_id);
+        Err(error_msg)
+    }
+
+    fn emit_stream_no_valid_event_error(&self, turn_id: &str, diagnostic_sample: &str) -> String {
+        let error_msg = if diagnostic_sample.trim().is_empty() {
+            "Claude stream-json ended without a valid stream event.".to_string()
+        } else {
+            format!(
+                "Claude stream-json ended without a valid stream event. Diagnostic sample:\n{}",
+                diagnostic_sample.trim()
+            )
+        };
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnError {
+                workspace_id: self.workspace_id.clone(),
+                error: error_msg.clone(),
+                code: Some("claude_stream_no_valid_event".to_string()),
+            },
+        );
+        error_msg
+    }
+
     /// Create a new Claude session for tests.
     #[cfg(test)]
     pub fn new(
@@ -304,9 +548,19 @@ impl ClaudeSession {
     /// Emit a TurnError event to notify the frontend when an error occurs
     /// outside the normal send_message flow (e.g., spawn failure, early errors).
     fn emit_turn_event(&self, turn_id: &str, event: EngineEvent) {
+        self.emit_turn_event_with_stream_timing(turn_id, event, None);
+    }
+
+    fn emit_turn_event_with_stream_timing(
+        &self,
+        turn_id: &str,
+        event: EngineEvent,
+        stream_timing: Option<ClaudeStreamTiming>,
+    ) {
         let _ = self.event_sender.send(ClaudeTurnEvent {
             turn_id: turn_id.to_string(),
             event,
+            stream_timing,
         });
     }
 
@@ -315,15 +569,21 @@ impl ClaudeSession {
         turn_id: &str,
         pending_text_delta: &mut BufferedClaudeTextDelta,
     ) {
-        let Some(text) = pending_text_delta.take() else {
+        let Some(emission) = pending_text_delta.take_with_timing() else {
             return;
         };
-        self.emit_turn_event(
+        self.emit_turn_event_with_stream_timing(
             turn_id,
             EngineEvent::TextDelta {
                 workspace_id: self.workspace_id.clone(),
-                text,
+                text: emission.text,
             },
+            Some(
+                emission
+                    .stream_startup_timing
+                    .unwrap_or_default()
+                    .to_stream_timing(emission.stdout_received_at_ms, unix_timestamp_ms()),
+            ),
         );
     }
 
@@ -583,6 +843,10 @@ impl ClaudeSession {
         Self::configure_spawn_command(&mut cmd);
 
         // Spawn the process
+        let mut stream_startup_timing = ClaudeStreamStartupTiming {
+            process_spawn_started_at_ms: Some(unix_timestamp_ms()),
+            ..ClaudeStreamStartupTiming::default()
+        };
         let mut child = match cmd.spawn() {
             Ok(child) => child,
             Err(e) => {
@@ -599,11 +863,13 @@ impl ClaudeSession {
                 return Err(error_msg);
             }
         };
+        stream_startup_timing.process_spawned_at_ms = Some(unix_timestamp_ms());
 
         // If stream-json input is enabled, write the message content to stdin.
         // This path is required for image payloads and multiline text prompts.
         if use_stream_json_input {
             if let Some(mut stdin) = child.stdin.take() {
+                stream_startup_timing.stdin_write_started_at_ms = Some(unix_timestamp_ms());
                 let message = match build_message_content(&params) {
                     Ok(value) => value,
                     Err(error) => {
@@ -653,6 +919,7 @@ impl ClaudeSession {
                 }
                 // Drop stdin to signal EOF
                 drop(stdin);
+                stream_startup_timing.stdin_closed_at_ms = Some(unix_timestamp_ms());
             } else {
                 return self
                     .fail_send_setup_and_terminate_child(
@@ -666,6 +933,7 @@ impl ClaudeSession {
             // For non-image messages, drop stdin immediately so the CLI
             // doesn't hang waiting for EOF.
             drop(child.stdin.take());
+            stream_startup_timing.stdin_closed_at_ms = Some(unix_timestamp_ms());
         }
 
         let stdout = match child.stdout.take() {
@@ -733,6 +1001,7 @@ impl ClaudeSession {
         );
 
         // Emit turn started event
+        stream_startup_timing.turn_started_at_ms = Some(unix_timestamp_ms());
         self.emit_turn_event(
             turn_id,
             EngineEvent::TurnStarted {
@@ -750,6 +1019,9 @@ impl ClaudeSession {
         let mut error_output = String::new();
         let mut stream_runtime_error: Option<String> = None;
         let mut stream_error_event_emitted = false;
+        let mut saw_valid_stream_event = false;
+        let first_event_deadline = Instant::now() + CLAUDE_STREAM_FIRST_EVENT_TIMEOUT;
+        let stream_diagnostic_sample = Arc::new(StdMutex::new(String::new()));
         let text_delta_coalesce_window = if cfg!(windows) {
             Duration::from_millis(CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS)
         } else {
@@ -760,12 +1032,17 @@ impl ClaudeSession {
         // Spawn stderr reader
         let stderr_reader = BufReader::new(stderr);
         let _workspace_id_clone = self.workspace_id.clone();
+        let stderr_diagnostic_sample = Arc::clone(&stream_diagnostic_sample);
         let stderr_handle = tokio::spawn(async move {
             let mut lines = stderr_reader.lines();
             let mut stderr_text = String::new();
             while let Ok(Some(line)) = lines.next_line().await {
                 stderr_text.push_str(&line);
                 stderr_text.push('\n');
+                if let Ok(mut sample) = stderr_diagnostic_sample.lock() {
+                    ClaudeSession::push_stream_diagnostic_sample(&mut sample, &line);
+                    ClaudeSession::push_stream_diagnostic_sample(&mut sample, "\n");
+                }
             }
             stderr_text
         });
@@ -779,15 +1056,50 @@ impl ClaudeSession {
             }
 
             let next_line = if pending_text_delta.is_empty() {
-                lines.next_line().await
+                if saw_valid_stream_event {
+                    lines.next_line().await
+                } else {
+                    let wait_duration = first_event_deadline
+                        .checked_duration_since(Instant::now())
+                        .unwrap_or(Duration::ZERO);
+                    match tokio::time::timeout(wait_duration, lines.next_line()).await {
+                        Ok(result) => result,
+                        Err(_) => {
+                            return self
+                                .fail_stream_no_event_timeout(
+                                    turn_id,
+                                    Arc::clone(&stream_diagnostic_sample),
+                                    stderr_handle,
+                                )
+                                .await;
+                        }
+                    }
+                }
             } else if let Some(wait_duration) =
                 pending_text_delta.remaining_window(text_delta_coalesce_window)
             {
+                let wait_duration = if saw_valid_stream_event {
+                    wait_duration
+                } else {
+                    let remaining_startup = first_event_deadline
+                        .checked_duration_since(Instant::now())
+                        .unwrap_or(Duration::ZERO);
+                    wait_duration.min(remaining_startup)
+                };
                 match tokio::time::timeout(wait_duration, lines.next_line()).await {
                     Ok(result) => result,
                     Err(_) => {
-                        self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
-                        continue;
+                        if saw_valid_stream_event {
+                            self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
+                            continue;
+                        }
+                        return self
+                            .fail_stream_no_event_timeout(
+                                turn_id,
+                                Arc::clone(&stream_diagnostic_sample),
+                                stderr_handle,
+                            )
+                            .await;
                     }
                 }
             } else {
@@ -813,9 +1125,28 @@ impl ClaudeSession {
             if line.trim().is_empty() {
                 continue;
             }
+            let line_received_at_ms = unix_timestamp_ms();
+            if stream_startup_timing.first_stdout_line_at_ms.is_none() {
+                stream_startup_timing.first_stdout_line_at_ms = Some(line_received_at_ms);
+            }
 
             match parse_claude_stream_json_line(&line) {
                 Ok(event) => {
+                    if Self::is_valid_claude_stream_event(&event) {
+                        if stream_startup_timing
+                            .first_valid_stream_event_at_ms
+                            .is_none()
+                        {
+                            stream_startup_timing.first_valid_stream_event_at_ms =
+                                Some(line_received_at_ms);
+                        }
+                        saw_valid_stream_event = true;
+                    } else if !saw_valid_stream_event {
+                        if let Ok(mut sample) = stream_diagnostic_sample.lock() {
+                            Self::push_stream_diagnostic_sample(&mut sample, &line);
+                            Self::push_stream_diagnostic_sample(&mut sample, "\n");
+                        }
+                    }
                     // If Claude only emits a final result without streaming deltas,
                     // synthesize a text delta so the frontend still renders a reply.
                     if !saw_text_delta {
@@ -824,8 +1155,15 @@ impl ClaudeSession {
                                 if let Some(text) = extract_result_text(&event) {
                                     if !text.trim().is_empty() {
                                         saw_text_delta = true;
+                                        if stream_startup_timing.first_text_delta_at_ms.is_none() {
+                                            stream_startup_timing.first_text_delta_at_ms =
+                                                Some(line_received_at_ms);
+                                        }
                                         response_text.push_str(&text);
-                                        pending_text_delta.push(&text);
+                                        pending_text_delta
+                                            .push_with_timing(&text, Some(line_received_at_ms));
+                                        pending_text_delta
+                                            .set_stream_startup_timing(&stream_startup_timing);
                                     }
                                 }
                             }
@@ -873,7 +1211,12 @@ impl ClaudeSession {
                         if let EngineEvent::TextDelta { ref text, .. } = unified_event {
                             response_text.push_str(text);
                             saw_text_delta = true;
-                            pending_text_delta.push(text);
+                            if stream_startup_timing.first_text_delta_at_ms.is_none() {
+                                stream_startup_timing.first_text_delta_at_ms =
+                                    Some(line_received_at_ms);
+                            }
+                            pending_text_delta.push_with_timing(text, Some(line_received_at_ms));
+                            pending_text_delta.set_stream_startup_timing(&stream_startup_timing);
                             continue;
                         }
 
@@ -881,7 +1224,16 @@ impl ClaudeSession {
                         let is_user_input_request =
                             matches!(&unified_event, EngineEvent::RequestUserInput { .. });
 
-                        self.emit_turn_event(turn_id, unified_event);
+                        self.emit_turn_event_with_stream_timing(
+                            turn_id,
+                            unified_event,
+                            Some(
+                                stream_startup_timing.to_stream_timing(
+                                    Some(line_received_at_ms),
+                                    unix_timestamp_ms(),
+                                ),
+                            ),
+                        );
 
                         if self.has_pending_approval_request_for_turn(turn_id) {
                             match self
@@ -955,6 +1307,10 @@ impl ClaudeSession {
                     // Non-JSON output, might be error
                     error_output.push_str(&line);
                     error_output.push('\n');
+                    if let Ok(mut sample) = stream_diagnostic_sample.lock() {
+                        Self::push_stream_diagnostic_sample(&mut sample, &line);
+                        Self::push_stream_diagnostic_sample(&mut sample, "\n");
+                    }
                     if stream_runtime_error.is_none() {
                         if looks_like_claude_runtime_error(trimmed) {
                             stream_runtime_error = Some(trimmed.to_string());
@@ -994,11 +1350,14 @@ impl ClaudeSession {
         // caused silent failures when the CLI produced partial output before crashing.
         if let Some(status) = status {
             if !status.success() {
-                let error_msg = if !error_output.is_empty() {
-                    error_output.trim().to_string()
-                } else {
-                    format!("Claude exited with status: {}", status)
-                };
+                let error_msg = Self::build_process_exit_error(
+                    status,
+                    &error_output,
+                    &Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample),
+                    use_stream_json_input,
+                    include_hook_events,
+                    params.access_mode.as_deref(),
+                );
 
                 if include_hook_events && Self::is_unknown_include_hook_events_error(&error_msg) {
                     self.clear_turn_ephemeral_state(turn_id);
@@ -1089,6 +1448,14 @@ impl ClaudeSession {
                     },
                 );
             }
+            self.clear_turn_ephemeral_state(turn_id);
+            return Err(error_msg);
+        }
+
+        if !saw_valid_stream_event {
+            let diagnostic_sample =
+                Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample);
+            let error_msg = self.emit_stream_no_valid_event_error(turn_id, &diagnostic_sample);
             self.clear_turn_ephemeral_state(turn_id);
             return Err(error_msg);
         }

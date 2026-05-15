@@ -11,7 +11,11 @@
       "Bash(npx tsc:*)",
       "Bash(npm install:*)",
       "Bash(git add *)",
-      "Bash(git rebase *)"
+      "Bash(git rebase *)",
+      "Bash(rtk git *)",
+      "Bash(rtk read *)",
+      "Bash(git check-ignore *)",
+      "Bash(rtk ls *)"
     ]
   }
 }

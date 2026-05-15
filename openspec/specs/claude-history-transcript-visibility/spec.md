@@ -1,7 +1,9 @@
 # claude-history-transcript-visibility Specification
 
 ## Purpose
-TBD - created by archiving change fix-claude-history-transcript-blanking. Update Purpose after archive.
+
+Defines the claude-history-transcript-visibility behavior contract, covering Claude History Restore MUST Preserve A Readable Transcript Surface.
+
 ## Requirements
 ### Requirement: Claude History Restore MUST Preserve A Readable Transcript Surface
 

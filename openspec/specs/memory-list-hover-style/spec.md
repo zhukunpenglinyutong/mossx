@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change t1-3-ui-memory-list-improvements. Update Purpose after archive.
+Defines the memory-list-hover-style behavior contract, covering Hover 轻量反馈.
 
 ## Requirements
 

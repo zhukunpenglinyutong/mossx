@@ -1,7 +1,9 @@
 # composer-queue-input-state Specification
 
 ## Purpose
-TBD - created by archiving change improve-composer-send-readiness-ux. Update Purpose after archive.
+
+Defines the composer-queue-input-state behavior contract, covering Composer MUST Present A Unified Input Activity State.
+
 ## Requirements
 ### Requirement: Composer MUST Present A Unified Input Activity State
 

@@ -1,7 +1,9 @@
 # rust-test-target-warning-cleanliness Specification
 
 ## Purpose
-TBD - created by archiving change clean-rust-test-target-warning-surface. Update Purpose after archive.
+
+Defines the rust-test-target-warning-cleanliness behavior contract, covering Rust test-target warning baseline MUST stay explicit.
+
 ## Requirements
 ### Requirement: Rust test-target warning baseline MUST stay explicit
 

@@ -1,7 +1,9 @@
 # context-ledger-governance-batch Specification
 
 ## Purpose
-TBD - created by archiving change deepen-context-ledger-governance-and-attribution. Update Purpose after archive.
+
+Defines the context-ledger-governance-batch behavior contract, covering Context Ledger SHALL Support Batch Governance For Explicit Governable Blocks.
+
 ## Requirements
 ### Requirement: Context Ledger SHALL Support Batch Governance For Explicit Governable Blocks
 

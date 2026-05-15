@@ -1,7 +1,9 @@
 # conversation-tool-card-persistence Specification
 
 ## Purpose
-TBD - created by archiving change chat-file-change-diff-persistence. Update Purpose after archive.
+
+Defines the conversation-tool-card-persistence behavior contract, covering Restart-Recoverable Tool Card Persistence.
+
 ## Requirements
 ### Requirement: Restart-Recoverable Tool Card Persistence
 The system MUST persist `commandExecution` and `fileChange` tool cards so they are restart-recoverable in conversation history.

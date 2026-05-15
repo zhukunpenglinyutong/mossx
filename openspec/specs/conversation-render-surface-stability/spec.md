@@ -1,7 +1,9 @@
 # conversation-render-surface-stability Specification
 
 ## Purpose
-TBD - created by archiving change fix-claude-chat-canvas-cross-platform-blanking. Update Purpose after archive.
+
+Defines the conversation-render-surface-stability behavior contract, covering Claude Live Conversation Rendering MUST Degrade Safely On Desktop Surfaces.
+
 ## Requirements
 ### Requirement: Claude Live Conversation Rendering MUST Degrade Safely On Desktop Surfaces
 

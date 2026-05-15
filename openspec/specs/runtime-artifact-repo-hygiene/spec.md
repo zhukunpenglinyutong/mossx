@@ -1,7 +1,9 @@
 # runtime-artifact-repo-hygiene Specification
 
 ## Purpose
-TBD - created by archiving change streamline-governance-doc-stack. Update Purpose after archive.
+
+Defines the runtime-artifact-repo-hygiene behavior contract, covering Runtime Artifacts MUST NOT Be Versioned As Long-Lived Repository Assets.
+
 ## Requirements
 ### Requirement: Runtime Artifacts MUST NOT Be Versioned As Long-Lived Repository Assets
 

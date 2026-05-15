@@ -1,7 +1,9 @@
 # codex-chat-canvas-command-quick-actions Specification
 
 ## Purpose
-TBD - created by archiving change add-codex-fast-review-controls-2026-03-07. Update Purpose after archive.
+
+Defines the codex-chat-canvas-command-quick-actions behavior contract, covering Codex Config Menu SHALL Provide Speed Quick Action.
+
 ## Requirements
 ### Requirement: Codex Config Menu SHALL Provide Speed Quick Action
 系统 MUST 在 Codex 引擎的配置菜单中提供 `Speed` 快捷入口，并通过二级菜单暴露 `Standard` 与 `Fast` 两个状态选项。

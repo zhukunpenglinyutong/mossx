@@ -1,7 +1,9 @@
 # thread-items-assistant-text-normalization-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-thread-items-assistant-text-normalization. Update Purpose after archive.
+
+Defines the thread-items-assistant-text-normalization-compatibility behavior contract, covering Thread Items Assistant Text Normalization Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Thread Items Assistant Text Normalization Extraction Compatibility
 The system SHALL preserve the effective export surface and user-visible assistant text outcomes when assistant text normalization logic is moved out of `threadItems.ts` into a dedicated utility module.

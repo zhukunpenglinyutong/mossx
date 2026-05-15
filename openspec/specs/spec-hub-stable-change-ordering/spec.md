@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change spec-hub-openspec-hardening-2026-02-25. Update Purpose after archive.
+Defines the spec-hub-stable-change-ordering behavior contract, covering Change List Ordering SHALL Be Metadata-Based.
 
 ## Requirements
 

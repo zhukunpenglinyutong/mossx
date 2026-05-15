@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change codemoss-spec-platform-integration-2026-02-22. Update Purpose after archive.
+Defines the spec-platform-adapter-openspec behavior contract, covering OpenSpec Action Execution Adapter.
 
 ## Requirements
 

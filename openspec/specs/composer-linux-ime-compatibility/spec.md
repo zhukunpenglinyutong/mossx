@@ -1,7 +1,9 @@
 # composer-linux-ime-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change fix-linux-ime-composer-compatibility. Update Purpose after archive.
+
+Defines the composer-linux-ime-compatibility behavior contract, covering Linux ChatInputBox MUST accept finalized IME text.
+
 ## Requirements
 ### Requirement: Linux ChatInputBox MUST accept finalized IME text
 

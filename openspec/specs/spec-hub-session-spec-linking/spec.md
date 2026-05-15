@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change codemoss-spec-hub-mvp-2026-02-23. Update Purpose after archive.
+Defines the spec-hub-session-spec-linking behavior contract, covering New Session MUST Inherit Resolved Spec Root.
+
 ## Requirements
 ### Requirement: New Session MUST Inherit Resolved Spec Root
 

@@ -120,6 +120,7 @@ type MessagesProps = {
   processingStartedAt?: number | null;
   lastDurationMs?: number | null;
   heartbeatPulse?: number;
+  codexSilentSuspectedAt?: number | null;
   workspacePath?: string | null;
   openTargets: OpenAppTarget[];
   selectedOpenAppId: string;
@@ -262,6 +263,7 @@ export const Messages = memo(function Messages({
   processingStartedAt = null,
   lastDurationMs = null,
   heartbeatPulse: legacyHeartbeatPulse = 0,
+  codexSilentSuspectedAt = null,
   workspacePath = null,
   openTargets,
   selectedOpenAppId,
@@ -1089,9 +1091,13 @@ export const Messages = memo(function Messages({
       (activeEngine === "codex" || activeEngine === "claude" || activeEngine === "gemini"),
     items: deferredRenderSourceItems,
   });
+  const codexSilentSuspectedLabel =
+    activeEngine === "codex" && codexSilentSuspectedAt !== null
+      ? t("messages.codexSilentSuspected")
+      : null;
   const primaryWorkingLabel = isContextCompacting
     ? t("chat.contextDualViewCompacting")
-    : approvalResumeWorkingLabel;
+    : codexSilentSuspectedLabel ?? approvalResumeWorkingLabel;
   const enableClaudeRenderSafeMode =
     (isWindowsDesktop || isMacDesktop) &&
     activeEngine === "claude" &&

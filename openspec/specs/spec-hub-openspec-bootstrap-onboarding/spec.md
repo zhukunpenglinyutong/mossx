@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change codemoss-spec-hub-mvp-2026-02-23. Update Purpose after archive.
+Defines the spec-hub-openspec-bootstrap-onboarding behavior contract, covering OpenSpec Bootstrap Guidance for Unsupported Workspace.
+
 ## Requirements
 ### Requirement: OpenSpec Bootstrap Guidance for Unsupported Workspace
 

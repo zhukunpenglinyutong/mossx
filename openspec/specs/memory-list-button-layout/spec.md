@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change t1-3-ui-memory-list-improvements. Update Purpose after archive.
+Defines the memory-list-button-layout behavior contract, covering 底部统一操作区布局.
 
 ## Requirements
 

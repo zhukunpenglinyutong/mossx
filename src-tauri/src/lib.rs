@@ -133,6 +133,13 @@ pub fn run() {
             {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
+                    let state = app_handle.state::<state::AppState>();
+                    state.sync_engine_configs_from_settings().await;
+                });
+            }
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                         let state = app_handle.state::<state::AppState>();

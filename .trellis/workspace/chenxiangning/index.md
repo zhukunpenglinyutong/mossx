@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 442
-- **Last Active**: 2026-05-13
+- **Total Sessions**: 473
+- **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~308 | Active |
+| `journal-13.md` | ~1713 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,37 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 473 | 2026-05-15 | 发布前 OpenSpec 文档卫生收口 | `5bb8ad5b` | `feature/v0.4.18` |
+| 472 | 2026-05-15 | 稳定核心运行时与实时契约 | `f4d60742` | `feature/v0.4.18` |
+| 471 | 2026-05-15 | 记录 AppImage Wayland 修复验证 | `1263ee8e` | `feature/v0.4.18` |
+| 470 | 2026-05-15 | 标记成熟流式输出重构契约 | `66a400a2` | `feature/v0.4.18` |
+| 469 | 2026-05-15 | 归档已验证 OpenSpec 提案 | `41cf2e8d` | `feature/v0.4.18` |
+| 468 | 2026-05-15 | 修复提示词增强重复结果 | `2810476b` | `feature/v0.4.18` |
+| 467 | 2026-05-15 | 增强 Prompt Enhancer Claude 失败诊断与兜底 | `541f9058` | `feature/v0.4.18` |
+| 466 | 2026-05-15 | 增强 Claude 首包延迟诊断 | `e4aadd8d` | `feature/v0.4.18` |
+| 465 | 2026-05-15 | 记录 Claude 流式首包延迟诊断 | `c552adb5` | `feature/v0.4.18` |
+| 464 | 2026-05-15 | 强化 Claude stream-json 首包存活检测 | `5aa06c13` | `feature/v0.4.18` |
+| 463 | 2026-05-15 | 记录 Codex 静默存活验证完成 | `7e605945` | `feature/v0.4.18` |
+| 462 | 2026-05-15 | 修复 Claude pending 会话收敛 | `005527b1` | `feature/v0.4.18` |
+| 461 | 2026-05-15 | 隐藏长期记忆入口 | `47b77924` | `feature/v0.4.18` |
+| 460 | 2026-05-15 | 优化项目记忆工作台弹窗 | `a0a80561` | `feature/v0.4.18` |
+| 459 | 2026-05-14 | 修复项目记忆引用召回完整性 | `022a7fe7` | `feature/v0.4.18` |
+| 458 | 2026-05-14 | 稳定会话创建与 Claude 列表窗口 | `4102b116` | `feature/v0.4.18` |
+| 457 | 2026-05-14 | 修复 Claude 会话侧栏连续性 | `3ce09521` | `feature/v0.4.18` |
+| 456 | 2026-05-14 | 收口项目记忆 OpenSpec 变更 | `44b6ebc2` | `feature/v0.4.18` |
+| 455 | 2026-05-14 | Project Memory 本地语义召回骨架 | `506716bc` | `feature/v0.4.18` |
+| 454 | 2026-05-14 | 提案本地记忆语义召回 | `cf9d7bfb` | `feature/v0.4.18` |
+| 453 | 2026-05-14 | 归档记忆引用展示 OpenSpec | `d5399825` | `feature/v0.4.18` |
+| 452 | 2026-05-14 | 统一记忆引用展示与详情 | `d40a974e` | `feature/v0.4.18` |
+| 451 | 2026-05-14 | 加固 Codex 静默会话存活判定 | `b8380037` | `feature/v0.4.18` |
+| 450 | 2026-05-14 | 完成 Project Memory 检索包清洗注入 | `00f3a246` | `feature/v0.4.18` |
+| 449 | 2026-05-14 | 文件树大项目渐进式加载 | `47c24223` | `feature/v0.4.18` |
+| 448 | 2026-05-14 | 完成 Project Memory Phase 3 易用性与可靠性 | `e02fa414` | `feature/v0.4.18` |
+| 447 | 2026-05-14 | Project Memory 完整对话轮次重构 | `2116aabf` | `feature/v0.4.18` |
+| 446 | 2026-05-14 | OpenSpec Spec Hygiene 收口 | `b2d8880f` | `feature/v0.4.18` |
+| 445 | 2026-05-14 | Phase 1 OpenSpec 收口归档 | `9b985edc` | `feature/v0.4.18` |
+| 444 | 2026-05-14 | Phase 1 发布证据收口 | `e5fea4c2` | `feature/v0.4.18` |
+| 443 | 2026-05-13 | 归档 Phase 1 已完成 OpenSpec 变更 | `0ad9a56a` | `feature/v0.4.18` |
 | 442 | 2026-05-13 | 更新 v0.4.17 变更记录 | `31b63e99` | `feature/v0.4.17` |
 | 441 | 2026-05-13 | 修复 realtime 终态 turn 迟到事件门禁 | `b75d2496` | `feature/v0.4.17` |
 | 440 | 2026-05-13 | 稳定 Web 服务启动按钮测试 | `040c6062` | `feature/v0.4.17` |

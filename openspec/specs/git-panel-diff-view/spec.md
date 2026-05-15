@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change git-panel-tree-view-single-diff. Update Purpose after archive.
+Defines the git-panel-diff-view behavior contract, covering Dual List View Modes.
+
 ## Requirements
 ### Requirement: Dual List View Modes
 

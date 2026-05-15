@@ -1,7 +1,9 @@
 # context-ledger-transition-diff Specification
 
 ## Purpose
-TBD - created by archiving change advance-context-ledger-transition-visibility. Update Purpose after archive.
+
+Defines the context-ledger-transition-diff behavior contract, covering Context Ledger SHALL Explain Transition Diffs Relative To The Last Send Baseline.
+
 ## Requirements
 ### Requirement: Context Ledger SHALL Explain Transition Diffs Relative To The Last Send Baseline
 

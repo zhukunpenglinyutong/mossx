@@ -1,7 +1,9 @@
 # engine-opencode-command-surface-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-engine-opencode-command-surface. Update Purpose after archive.
+
+Defines the engine-opencode-command-surface-compatibility behavior contract, covering Engine OpenCode Command Surface Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Engine OpenCode Command Surface Extraction Compatibility
 The system SHALL preserve the effective OpenCode engine command contract and cleanup behavior when the OpenCode command surface is moved out of `engine/commands.rs` into a dedicated submodule.

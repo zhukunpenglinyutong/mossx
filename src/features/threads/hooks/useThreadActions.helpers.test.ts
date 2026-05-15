@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ConversationItem, ThreadSummary } from "../../../types";
 import {
+  mergeDegradedClaudeContinuitySummaries,
   mergeCodexCatalogSessionSummaries,
   selectRecoveredNewThreadSummary,
   selectReplacementThreadByMessageHistory,
@@ -189,6 +190,58 @@ describe("useThreadActions.helpers", () => {
       merged.find((thread) => thread.id === "claude:subagent:parent-session:a5e6403f261113239")
         ?.parentThreadId,
     ).toBe("claude:parent-session");
+  });
+
+  it("does not let generic Claude catalog titles overwrite meaningful existing titles", () => {
+    const merged = mergeCodexCatalogSessionSummaries(
+      [
+        {
+          id: "claude:session-1",
+          name: "稳定命名",
+          updatedAt: 100,
+          engineSource: "claude",
+          threadKind: "native",
+        },
+      ],
+      [
+        {
+          sessionId: "claude:session-1",
+          title: "",
+          updatedAt: 120,
+          engine: "claude",
+        },
+      ],
+      "workspace-1",
+      {},
+      () => undefined,
+    );
+
+    expect(merged.find((thread) => thread.id === "claude:session-1")?.name).toBe("稳定命名");
+  });
+
+  it("does not resurrect excluded Claude rows during degraded continuity", () => {
+    const merged = mergeDegradedClaudeContinuitySummaries(
+      [],
+      [
+        {
+          id: "claude:hidden-native",
+          name: "Hidden native",
+          updatedAt: 120,
+          engineSource: "claude",
+          threadKind: "native",
+        },
+        {
+          id: "claude:visible-native",
+          name: "Visible native",
+          updatedAt: 100,
+          engineSource: "claude",
+          threadKind: "native",
+        },
+      ],
+      new Set(["claude:hidden-native"]),
+    );
+
+    expect(merged.map((thread) => thread.id)).toEqual(["claude:visible-native"]);
   });
 
 });

@@ -1,7 +1,9 @@
 # thread-actions-session-runtime-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-thread-actions-session-runtime. Update Purpose after archive.
+
+Defines the thread-actions-session-runtime-compatibility behavior contract, covering Thread Actions Session Runtime Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Thread Actions Session Runtime Extraction Compatibility
 

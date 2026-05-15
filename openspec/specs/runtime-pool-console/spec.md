@@ -1,7 +1,9 @@
 # runtime-pool-console Specification
 
 ## Purpose
-TBD - created by archiving change runtime-orchestrator-pool-console. Update Purpose after archive.
+
+Defines the runtime-pool-console behavior contract, covering Settings MUST expose a runtime pool console.
+
 ## Requirements
 ### Requirement: Settings MUST expose a runtime pool console
 

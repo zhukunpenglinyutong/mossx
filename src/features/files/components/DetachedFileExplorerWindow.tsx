@@ -71,6 +71,7 @@ export function DetachedFileExplorerWindow() {
   const {
     files,
     directories,
+    directoryMetadata,
     gitignoredFiles,
     gitignoredDirectories,
     isLoading,
@@ -216,6 +217,7 @@ export function DetachedFileExplorerWindow() {
         gitRoot={session.gitRoot ?? null}
         files={files}
         directories={directories}
+        directoryMetadata={directoryMetadata}
         isLoading={isLoading}
         loadError={loadError}
         gitignoredFiles={gitignoredFiles}

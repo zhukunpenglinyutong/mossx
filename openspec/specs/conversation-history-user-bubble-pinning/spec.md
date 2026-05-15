@@ -1,7 +1,9 @@
 # conversation-history-user-bubble-pinning Specification
 
 ## Purpose
-TBD - created by archiving change pin-history-user-question-bubble. Update Purpose after archive.
+
+Defines the conversation-history-user-bubble-pinning behavior contract, covering History Browsing SHALL Pin The Current Ordinary User Question As A Section Header.
+
 ## Requirements
 ### Requirement: History Browsing SHALL Pin The Current Ordinary User Question As A Section Header
 The conversation canvas SHALL keep the ordinary user question for the current history section fixed at the top of the message viewport while the user browses completed conversation history.

@@ -1,7 +1,9 @@
 # session-activity-file-open-affordances Specification
 
 ## Purpose
-TBD - created by archiving change normalize-conversation-file-change-surfaces. Update Purpose after archive.
+
+Defines the session-activity-file-open-affordances behavior contract, covering Activity Panel Primary File Click MUST Open The File And Maximize The Editor Surface.
+
 ## Requirements
 ### Requirement: Activity Panel Primary File Click MUST Open The File And Maximize The Editor Surface
 

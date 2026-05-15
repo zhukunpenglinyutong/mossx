@@ -1,7 +1,9 @@
 # conversation-completion-email-notification Specification
 
 ## Purpose
-TBD - created by archiving change add-conversation-email-notification. Update Purpose after archive.
+
+Defines the conversation-completion-email-notification behavior contract, covering Composer MUST Expose Thread-Scoped One-Shot Email Intent.
+
 ## Requirements
 ### Requirement: Composer MUST Expose Thread-Scoped One-Shot Email Intent
 The system SHALL expose an email icon toggle in the conversation composer that represents a one-shot completion email intent for the current conversation/thread only.

@@ -28,6 +28,39 @@ describe("conversationNormalization", () => {
     expect(normalized.changed).toBe(true);
   });
 
+  it("treats project-memory retrieval pack wrappers as non-user-visible context", () => {
+    const normalized = normalizeUserVisibleText(
+      [
+        '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+        "Cleaned Context:",
+        "- [M1] 项目使用 Spring Boot。",
+        "Source Records:",
+        "[M1] memoryId=m-1 title=技术栈 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+        "</project-memory-pack>",
+        "",
+        "继续分析",
+      ].join("\n"),
+    );
+
+    expect(normalized.visibleText).toBe("继续分析");
+    expect(
+      isEquivalentUserObservation(
+        { text: "继续分析", images: [] },
+        {
+          text: [
+            '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+            "Cleaned Context:",
+            "- [M1] 项目使用 Spring Boot。",
+            "</project-memory-pack>",
+            "",
+            "继续分析",
+          ].join("\n"),
+          images: [],
+        },
+      ),
+    ).toBe(true);
+  });
+
   it("returns visible assistant text without hidden control-plane markers", () => {
     const normalized = normalizeAssistantVisibleText(
       [

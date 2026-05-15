@@ -40,7 +40,6 @@ fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, P
         use std::os::unix::fs::PermissionsExt;
 
         let mut script = String::from("#!/bin/sh\n");
-        script.push_str("cat >/dev/null || true\n");
         script.push_str("cat <<'EOF'\n");
         for line in lines {
             script.push_str(line);
@@ -59,6 +58,49 @@ fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, P
     (root, workspace_path, script_path)
 }
 
+fn create_fake_claude_script(script_body: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let root = std::env::temp_dir().join(format!("ccgui-claude-script-{}", uuid::Uuid::new_v4()));
+    let workspace_path = root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create fake claude workspace");
+
+    #[cfg(windows)]
+    let script_path = root.join("fake-claude.cmd");
+    #[cfg(not(windows))]
+    let script_path = root.join("fake-claude.sh");
+
+    #[cfg(windows)]
+    {
+        std::fs::write(&script_path, script_body).expect("write fake claude cmd");
+    }
+
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::write(&script_path, script_body).expect("write fake claude shell");
+        let mut permissions = std::fs::metadata(&script_path)
+            .expect("read fake claude metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script_path, permissions).expect("chmod fake claude shell");
+    }
+
+    (root, workspace_path, script_path)
+}
+
+fn test_session_with_bin(workspace_path: PathBuf, script_path: PathBuf) -> ClaudeSession {
+    ClaudeSession::new(
+        "test-workspace".to_string(),
+        workspace_path,
+        Some(EngineConfig {
+            bin_path: Some(script_path.to_string_lossy().to_string()),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    )
+}
+
 fn drain_turn_events(
     receiver: &mut tokio::sync::broadcast::Receiver<ClaudeTurnEvent>,
 ) -> Vec<ClaudeTurnEvent> {
@@ -71,6 +113,13 @@ fn drain_turn_events(
         }
     }
     events
+}
+
+fn turn_error_event(events: &[ClaudeTurnEvent]) -> Option<(&String, &Option<String>)> {
+    events.iter().find_map(|event| match &event.event {
+        EngineEvent::TurnError { error, code, .. } => Some((error, code)),
+        _ => None,
+    })
 }
 
 #[test]
@@ -373,6 +422,22 @@ async fn send_message_batches_windows_text_deltas_without_delaying_other_platfor
             _ => None,
         })
         .collect();
+    let first_text_timing = events
+        .iter()
+        .find_map(|event| {
+            matches!(&event.event, EngineEvent::TextDelta { .. })
+                .then(|| event.stream_timing.as_ref())
+                .flatten()
+        })
+        .expect("first text delta should include stream startup timing");
+    assert!(first_text_timing.process_spawn_started_at_ms.is_some());
+    assert!(first_text_timing.process_spawned_at_ms.is_some());
+    assert!(first_text_timing.stdin_closed_at_ms.is_some());
+    assert!(first_text_timing.turn_started_at_ms.is_some());
+    assert!(first_text_timing.first_stdout_line_at_ms.is_some());
+    assert!(first_text_timing.first_valid_stream_event_at_ms.is_some());
+    assert!(first_text_timing.first_text_delta_at_ms.is_some());
+    assert!(first_text_timing.session_emitted_at_ms > 0);
     let reasoning_index = events
         .iter()
         .position(|event| matches!(&event.event, EngineEvent::ReasoningDelta { .. }))
@@ -459,4 +524,144 @@ async fn send_message_treats_stream_result_as_raw_and_emits_single_final_complet
         })
         .expect("final completion payload");
     assert_eq!(completed, &json!({ "text": "final answer" }));
+}
+
+#[tokio::test]
+async fn send_message_reports_exit_metadata_when_claude_fails_without_output() {
+    #[cfg(windows)]
+    let script = "@echo off\r\nexit /b 1\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\nexit 1\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "line1\nline2".to_string();
+    params.access_mode = Some("read-only".to_string());
+
+    let error = session
+        .send_message(params, "turn-exit-no-output")
+        .await
+        .expect_err("non-zero fake claude should fail");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(error.contains("Claude exited with status"));
+    assert!(error.contains("Diagnostics:"));
+    assert!(error.contains("input_format=stream-json"));
+    assert!(error.contains("include_hook_events=true"));
+    assert!(error.contains("permission_mode=read-only"));
+    assert!(error.contains("No stdout/stderr diagnostics were observed"));
+    let (turn_error, code) = turn_error_event(&events).expect("turn error event");
+    assert!(turn_error.contains("input_format=stream-json"));
+    assert!(code.is_none());
+}
+
+#[tokio::test]
+async fn send_message_times_out_when_claude_stream_never_emits_valid_event() {
+    #[cfg(windows)]
+    let script = "@echo off\r\nping 127.0.0.1 -n 15 >nul\r\nexit /b 0\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\nsleep 12\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let error = session
+        .send_message(params, "turn-silent")
+        .await
+        .expect_err("silent fake claude should time out");
+    let events = drain_turn_events(&mut receiver);
+    let active_process_ids = session.active_process_ids().await;
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(error.contains("Claude stream-json startup timed out"));
+    assert!(active_process_ids.is_empty());
+    let (turn_error, code) = turn_error_event(&events).expect("turn error event");
+    assert!(turn_error.contains("No stdout/stderr diagnostics were observed"));
+    assert_eq!(code.as_deref(), Some("claude_stream_no_event_timeout"));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event.event, EngineEvent::TurnCompleted { .. })));
+}
+
+#[tokio::test]
+async fn send_message_times_out_after_malformed_claude_stream_output() {
+    #[cfg(windows)]
+    let script = "@echo off\r\necho not-json-from-provider\r\nping 127.0.0.1 -n 15 >nul\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\necho 'not-json-from-provider'\nsleep 12\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let error = session
+        .send_message(params, "turn-malformed")
+        .await
+        .expect_err("malformed fake claude should time out");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(error.contains("Claude stream-json startup timed out"));
+    assert!(error.contains("not-json-from-provider"));
+    let (turn_error, code) = turn_error_event(&events).expect("turn error event");
+    assert!(turn_error.contains("not-json-from-provider"));
+    assert_eq!(code.as_deref(), Some("claude_stream_no_event_timeout"));
+}
+
+#[tokio::test]
+async fn send_message_does_not_treat_json_without_type_as_valid_stream_liveness() {
+    #[cfg(windows)]
+    let script = "@echo off\r\necho {}\r\nping 127.0.0.1 -n 15 >nul\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\necho '{}'\nsleep 12\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let error = session
+        .send_message(params, "turn-json-without-type")
+        .await
+        .expect_err("json without type should not satisfy stream liveness");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(error.contains("Claude stream-json startup timed out"));
+    assert!(error.contains("{}"));
+    let (turn_error, code) = turn_error_event(&events).expect("turn error event");
+    assert!(turn_error.contains("{}"));
+    assert_eq!(code.as_deref(), Some("claude_stream_no_event_timeout"));
+}
+
+#[tokio::test]
+async fn send_message_does_not_treat_unknown_json_type_as_valid_stream_liveness() {
+    #[cfg(windows)]
+    let script =
+        "@echo off\r\necho {\"type\":\"provider_banner\"}\r\nping 127.0.0.1 -n 15 >nul\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\necho '{\"type\":\"provider_banner\"}'\nsleep 12\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let error = session
+        .send_message(params, "turn-unknown-json-type")
+        .await
+        .expect_err("unknown json event type should not satisfy stream liveness");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(error.contains("Claude stream-json startup timed out"));
+    assert!(error.contains("provider_banner"));
+    let (turn_error, code) = turn_error_event(&events).expect("turn error event");
+    assert!(turn_error.contains("provider_banner"));
+    assert_eq!(code.as_deref(), Some("claude_stream_no_event_timeout"));
 }

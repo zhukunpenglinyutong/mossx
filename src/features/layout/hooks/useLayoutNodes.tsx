@@ -92,6 +92,7 @@ import type { UpdateState } from "../../update/hooks/useUpdater";
 import type { TerminalSessionState } from "../../terminal/hooks/useTerminalSession";
 import type { TerminalTab } from "../../terminal/hooks/useTerminalTabs";
 import type { ErrorToast } from "../../../services/toasts";
+import type { WorkspaceDirectoryEntry } from "../../../services/tauri";
 import type {
   CodeAnnotationBridgeProps,
   CodeAnnotationDraftInput,
@@ -149,6 +150,8 @@ type ThreadActivityStatus = {
   codexCompactionLifecycleState?: "idle" | "compacting" | "completed";
   codexCompactionCompletedAt?: number | null;
   lastTokenUsageUpdatedAt?: number | null;
+  codexSilentSuspectedAt?: number | null;
+  codexSilentSuspectedSource?: string | null;
 };
 
 type GitDiffViewerItem = {
@@ -689,6 +692,7 @@ type LayoutNodesOptions = {
   commands?: CustomCommandOption[];
   files: string[];
   directories: string[];
+  directoryMetadata: WorkspaceDirectoryEntry[];
   gitignoredFiles: Set<string>;
   gitignoredDirectories: Set<string>;
   onInsertComposerText: (text: string) => void;
@@ -1476,7 +1480,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       appMode={options.appMode}
       onAppModeChange={options.onAppModeChange}
       onOpenHomeChat={options.onOpenHomeChat}
-      onOpenMemory={options.onOpenMemory}
       onLockPanel={options.onLockPanel}
       onOpenProjectMemory={options.onOpenProjectMemory}
       onOpenReleaseNotes={options.onOpenReleaseNotes}
@@ -1589,6 +1592,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       processingStartedAt={activeThreadStatus?.processingStartedAt ?? null}
       lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
       heartbeatPulse={heartbeatPulseRef.current ?? 0}
+      codexSilentSuspectedAt={activeThreadStatus?.codexSilentSuspectedAt ?? null}
     />
   ), [
     options.activeItems,
@@ -1630,6 +1634,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     activeThreadStatus?.isContextCompacting,
     activeThreadStatus?.processingStartedAt,
     activeThreadStatus?.lastDurationMs,
+    activeThreadStatus?.codexSilentSuspectedAt,
     // heartbeatPulse removed from deps — uses ref to avoid
     // recreating messagesNode on every heartbeat tick
   ]
@@ -2042,6 +2047,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         gitRoot={options.gitRoot}
         files={options.files}
         directories={options.directories}
+        directoryMetadata={options.directoryMetadata}
         isLoading={options.fileTreeLoading}
         loadError={options.fileTreeLoadError}
         filePanelMode={options.filePanelMode}
@@ -2104,6 +2110,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffPanelNode = (
       <ProjectMemoryPanel
         workspaceId={options.activeWorkspace?.id ?? null}
+        workspaces={options.workspaces}
+        onSelectWorkspace={options.onSelectWorkspace}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
         focusMemoryId={options.focusedProjectMemoryId ?? null}

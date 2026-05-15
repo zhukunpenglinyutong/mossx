@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change codemoss-spec-hub-mvp-2026-02-23. Update Purpose after archive.
+Defines the spec-hub-environment-doctor behavior contract, covering Managed and BYO Mode Selection.
+
 ## Requirements
 ### Requirement: Managed and BYO Mode Selection
 

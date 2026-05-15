@@ -43,7 +43,6 @@ import {
   writeClientStoreValue,
 } from "../../../services/clientStorage";
 import Brain from "lucide-react/dist/esm/icons/brain";
-import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 import BriefcaseBusiness from "lucide-react/dist/esm/icons/briefcase-business";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
@@ -435,7 +434,6 @@ type SidebarProps = {
   appMode: AppMode;
   onAppModeChange: (mode: AppMode) => void;
   onOpenHomeChat: () => void;
-  onOpenMemory: () => void;
   onLockPanel?: () => void;
   onOpenProjectMemory: () => void;
   onOpenReleaseNotes: () => void;
@@ -522,7 +520,6 @@ export function Sidebar({
   appMode,
   onAppModeChange,
   onOpenHomeChat,
-  onOpenMemory,
   onLockPanel,
   onOpenProjectMemory,
   onOpenReleaseNotes,
@@ -2145,18 +2142,6 @@ export function Sidebar({
                   >
                     <Lock size={14} aria-hidden />
                     <span>{t("lockScreen.lock")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sidebar-settings-dropdown-item"
-                    onClick={() => {
-                      setIsSettingsMenuOpen(false);
-                      onOpenMemory();
-                    }}
-                  >
-                    <BrainCircuit size={14} aria-hidden />
-                    <span>{t("sidebar.longTermMemory")}</span>
                   </button>
                   <button
                     type="button"

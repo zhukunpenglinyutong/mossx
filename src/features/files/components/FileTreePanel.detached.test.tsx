@@ -6,7 +6,7 @@ import {
   DETACHED_FILE_TREE_DRAG_SNAPSHOT_STORAGE_KEY,
 } from "../detachedFileTreeDragBridge";
 
-const invokeMock = vi.fn(async () => null);
+const invokeMock = vi.fn(async (..._args: any[]) => null);
 const emitToMock = vi.fn(async () => undefined);
 
 vi.mock("react-i18next", () => ({
@@ -24,12 +24,35 @@ vi.mock("@tauri-apps/api/event", () => ({
   emitTo: (...args: any[]) => (emitToMock as any)(...args),
 }));
 
+vi.mock("../../../services/tauri", () => ({
+  getWorkspaceDirectoryChildren: (workspaceId: string, path: string) =>
+    invokeMock("list_workspace_directory_children", { workspaceId, path }),
+  readWorkspaceFile: (workspaceId: string, path: string) =>
+    invokeMock("read_workspace_file", { workspaceId, path }),
+  createWorkspaceDirectory: (workspaceId: string, path: string) =>
+    invokeMock("create_workspace_directory", { workspaceId, path }),
+  copyWorkspaceItem: (workspaceId: string, path: string) =>
+    invokeMock("copy_workspace_item", { workspaceId, path }),
+  trashWorkspaceItem: (workspaceId: string, path: string) =>
+    invokeMock("trash_workspace_item", { workspaceId, path }),
+  writeWorkspaceFile: (workspaceId: string, path: string, content: string) =>
+    invokeMock("write_workspace_file", { workspaceId, path, content }),
+}));
+
 vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: vi.fn(async () => undefined),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   confirm: vi.fn(async () => true),
+}));
+
+vi.mock("../../../components/FileIcon", () => ({
+  default: () => <span data-testid="file-icon" />,
+}));
+
+vi.mock("./FilePreviewPopover", () => ({
+  FilePreviewPopover: () => <div data-testid="file-preview-popover" />,
 }));
 
 let FileTreePanel: typeof import("./FileTreePanel").FileTreePanel;

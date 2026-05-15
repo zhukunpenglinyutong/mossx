@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change workspace-home-shadcn-redesign-2026-02-25. Update Purpose after archive.
+Defines the workspace-home-shadcn-ux behavior contract, covering 首页三段式信息架构与首屏可达性.
 
 ## Requirements
 

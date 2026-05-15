@@ -919,6 +919,97 @@ mod tests {
     }
 
     #[test]
+    fn canonical_engine_events_map_to_app_server_contract_methods() {
+        let events = vec![
+            (
+                EngineEvent::TurnStarted {
+                    workspace_id: "ws-contract".to_string(),
+                    turn_id: "turn-contract-1".to_string(),
+                },
+                "turn/started",
+            ),
+            (
+                EngineEvent::TextDelta {
+                    workspace_id: "ws-contract".to_string(),
+                    text: "assistant delta".to_string(),
+                },
+                "item/agentMessage/delta",
+            ),
+            (
+                EngineEvent::ReasoningDelta {
+                    workspace_id: "ws-contract".to_string(),
+                    text: "reasoning delta".to_string(),
+                },
+                "item/reasoning/textDelta",
+            ),
+            (
+                EngineEvent::ToolOutputDelta {
+                    workspace_id: "ws-contract".to_string(),
+                    tool_id: "tool-contract-1".to_string(),
+                    tool_name: Some("exec_command".to_string()),
+                    delta: "tool output".to_string(),
+                },
+                "item/commandExecution/outputDelta",
+            ),
+            (
+                EngineEvent::TurnCompleted {
+                    workspace_id: "ws-contract".to_string(),
+                    result: None,
+                },
+                "turn/completed",
+            ),
+            (
+                EngineEvent::TurnError {
+                    workspace_id: "ws-contract".to_string(),
+                    error: "turn failed".to_string(),
+                    code: Some("contract_error".to_string()),
+                },
+                "turn/error",
+            ),
+            (
+                EngineEvent::UsageUpdate {
+                    workspace_id: "ws-contract".to_string(),
+                    input_tokens: Some(10),
+                    output_tokens: Some(5),
+                    cached_tokens: Some(2),
+                    model_context_window: Some(200000),
+                    context_used_tokens: None,
+                    context_usage_source: None,
+                    context_usage_freshness: None,
+                    context_used_percent: None,
+                    context_remaining_percent: None,
+                    context_tool_usages: None,
+                    context_tool_usages_truncated: None,
+                    context_category_usages: None,
+                },
+                "thread/tokenUsage/updated",
+            ),
+            (
+                EngineEvent::ProcessingHeartbeat {
+                    workspace_id: "ws-contract".to_string(),
+                    pulse: 7,
+                },
+                "processing/heartbeat",
+            ),
+        ];
+
+        for (event, expected_method) in events {
+            let mapped =
+                engine_event_to_app_server_event(&event, "thread-contract", "item-contract")
+                    .expect("canonical event maps to app-server payload");
+            assert_eq!(
+                mapped.workspace_id,
+                "ws-contract",
+                "workspace should remain attached for {expected_method}"
+            );
+            assert_eq!(
+                mapped.message["method"],
+                Value::String(expected_method.to_string())
+            );
+        }
+    }
+
+    #[test]
     fn turn_completed_maps_turn_context_to_app_server_payload() {
         let event = EngineEvent::TurnCompleted {
             workspace_id: "ws-1".to_string(),

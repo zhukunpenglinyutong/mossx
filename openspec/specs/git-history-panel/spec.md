@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change git-history-panel. Update Purpose after archive.
+Defines the git-history-panel behavior contract, covering Four-Region Git Log Workspace.
+
 ## Requirements
 ### Requirement: Four-Region Git Log Workspace
 

@@ -1,7 +1,9 @@
 # runtime-orchestrator Specification
 
 ## Purpose
-TBD - created by archiving change runtime-orchestrator-pool-console. Update Purpose after archive.
+
+Defines the runtime-orchestrator behavior contract, covering Runtime Orchestrator MUST manage workspace runtimes as budgeted resources.
+
 ## Requirements
 ### Requirement: Runtime Orchestrator MUST manage workspace runtimes as budgeted resources
 The system MUST manage persistent workspace runtimes through a unified Runtime Orchestrator instead of implicitly binding runtime existence to workspace visibility or restore state.

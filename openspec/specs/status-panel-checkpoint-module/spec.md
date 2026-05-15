@@ -1,7 +1,9 @@
 # status-panel-checkpoint-module Specification
 
 ## Purpose
-TBD - created by archiving change replace-edits-with-checkpoint. Update Purpose after archive.
+
+Defines the status-panel-checkpoint-module behavior contract, covering Bottom Status Panel MUST Replace Legacy Edits Tab With A Checkpoint Result Surface.
+
 ## Requirements
 ### Requirement: Bottom Status Panel MUST Replace Legacy Edits Tab With A Checkpoint Result Surface
 

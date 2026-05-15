@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change spec-hub-openspec-hardening-2026-02-25. Update Purpose after archive.
+Defines the spec-hub-truncated-risk-guard behavior contract, covering Truncated Artifact Reads SHALL Raise Gate Risk Signals.
 
 ## Requirements
 

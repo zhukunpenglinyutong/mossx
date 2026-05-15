@@ -21,6 +21,7 @@
 - 禁止无语义命名：`data/info/temp`。
 - callback 使用 `onXxx`，并声明 payload type。
 - nullable 字段显式写 `T | null`，避免隐式 optional。
+- optional array/map/set props 不得在参数解构里写 `=[]` / `= new Set()` / `= new Map()`；使用 module-level `EMPTY_*` 常量，避免每次 render 生成新引用并触发 `useMemo/useEffect` 循环。
 
 ## Styling 规范
 

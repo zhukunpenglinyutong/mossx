@@ -1,7 +1,9 @@
 # exhaustive-deps-warning-governance Specification
 
 ## Purpose
-TBD - created by archiving change triage-exhaustive-deps-warning-batches. Update Purpose after archive.
+
+Defines the exhaustive-deps-warning-governance behavior contract, covering Exhaustive deps warnings must be triaged before remediation.
+
 ## Requirements
 ### Requirement: Exhaustive deps warnings must be triaged before remediation
 

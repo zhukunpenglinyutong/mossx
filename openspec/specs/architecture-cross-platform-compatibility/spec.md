@@ -1,7 +1,9 @@
 # architecture-cross-platform-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change phase1-architecture-hardening. Update Purpose after archive.
+
+Defines the architecture-cross-platform-compatibility behavior contract, covering Cross-Platform Architecture Extraction MUST Preserve Equivalent Behavior.
+
 ## Requirements
 ### Requirement: Cross-Platform Architecture Extraction MUST Preserve Equivalent Behavior
 第一阶段架构抽取 MUST 将 Windows 与 macOS 视为同级目标平台，并保持 shell、process、path、filesystem 与 fallback 行为等价可解释。

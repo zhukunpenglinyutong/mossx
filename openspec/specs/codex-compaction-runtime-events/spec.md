@@ -1,7 +1,9 @@
 # codex-compaction-runtime-events Specification
 
 ## Purpose
-TBD - created by archiving change codex-context-auto-compaction-runtime. Update Purpose after archive.
+
+Defines the codex-compaction-runtime-events behavior contract, covering Compaction Lifecycle Event Emission.
+
 ## Requirements
 ### Requirement: Compaction Lifecycle Event Emission
 The runtime MUST publish explicit lifecycle events for compaction start and completion.

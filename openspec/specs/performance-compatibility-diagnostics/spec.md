@@ -1,7 +1,9 @@
 # performance-compatibility-diagnostics Specification
 
 ## Purpose
-TBD - created by archiving change add-performance-compatibility-diagnostics. Update Purpose after archive.
+
+Defines the performance-compatibility-diagnostics behavior contract, covering Performance Compatibility Mode MUST Be Opt-In And Non-Invasive.
+
 ## Requirements
 ### Requirement: Performance Compatibility Mode MUST Be Opt-In And Non-Invasive
 

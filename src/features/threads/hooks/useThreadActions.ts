@@ -53,6 +53,10 @@ import {
 } from "./useThreadActions.workspacePath";
 import { useAutomaticRuntimeRecovery, type AutomaticRuntimeRecoverySource } from "./useAutomaticRuntimeRecovery";
 import {
+  DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+  normalizeVisibleThreadRootCount,
+} from "../../app/constants";
+import {
   createArchiveClaudeThreadAction,
   createArchiveThreadAction,
   createDeleteThreadForWorkspaceAction,
@@ -72,7 +76,9 @@ import {
   markThreadSummariesDegraded,
   mergeCodexCatalogSessionSummaries,
   mergeDegradedCodexContinuitySummaries,
+  mergeDegradedClaudeContinuitySummaries,
   mergeGeminiSessionSummaries,
+  mergeThreadSummaryPreservingStableIdentity,
   mergeRecoveredThreadSummaries,
   normalizeGeminiSessionSummaries,
   normalizeThreadListPartialSource,
@@ -83,6 +89,7 @@ import {
   selectReplacementThreadByMessageHistory,
   selectReplacementThreadSummary,
   shouldApplyCodexSidebarContinuity,
+  shouldApplyClaudeSidebarContinuity,
   shouldIncludeWorkspaceThreadEntry,
   shouldReplaceUserInputQueueFromSnapshot,
   withTimeout,
@@ -148,6 +155,10 @@ const GEMINI_SESSION_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const SESSION_CATALOG_PAGE_SIZE = 200;
+const MIN_NATIVE_SESSION_LIST_LIMIT = Math.min(
+  SESSION_CATALOG_PAGE_SIZE,
+  DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+);
 const THREAD_LIST_CURSOR_SOURCE_SEPARATOR = "::";
 const THREAD_LIST_CURSOR_CATALOG_ROOT = "__root__";
 
@@ -186,6 +197,16 @@ function decodeThreadListCursorState(cursor: string): ThreadListCursorState {
     return { source: "catalog", cursor: trimmedCursor };
   }
   return { source: "runtime", cursor: trimmedCursor };
+}
+
+export function resolveNativeSessionListLimit(workspace: WorkspaceInfo): number {
+  const visibleRootCount = normalizeVisibleThreadRootCount(
+    workspace.settings.visibleThreadRootCount,
+  );
+  return Math.min(
+    SESSION_CATALOG_PAGE_SIZE,
+    Math.max(MIN_NATIVE_SESSION_LIST_LIMIT, visibleRootCount),
+  );
 }
 
 function resolveThreadListCursorForDisplay(params: {
@@ -1802,6 +1823,8 @@ export function useThreadActions({
         let allSummaries: ThreadSummary[] = summaries;
         const mergedById = new Map<string, ThreadSummary>();
         allSummaries.forEach((entry) => mergedById.set(entry.id, entry));
+        const lastGoodThreadSummaries = getLastGoodThreadSummaries(workspace.id);
+        const nativeSessionListLimit = resolveNativeSessionListLimit(workspace);
         const opencodeSessionsPromise = includeOpenCodeSessions && !shouldDeferFullSessionCatalog
           ? withTimeout(
               getOpenCodeSessionListService(workspace.id),
@@ -1815,7 +1838,7 @@ export function useThreadActions({
           shouldDeferFullSessionCatalog
             ? Promise.resolve([])
             : withTimeout(
-                listClaudeSessionsService(workspace.path, 50),
+                listClaudeSessionsService(workspace.path, nativeSessionListLimit),
                 NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
               ),
           opencodeSessionsPromise,
@@ -1855,11 +1878,13 @@ export function useThreadActions({
               }
               const prev = mergedById.get(id);
               const updatedAt = session.updatedAt;
+              const mappedTitle = mappedTitles[id];
+              const customTitle = getCustomName(workspace.id, id);
               const next: ThreadSummary = {
                 id,
                 name:
-                  mappedTitles[id] ||
-                  getCustomName(workspace.id, id) ||
+                  mappedTitle ||
+                  customTitle ||
                   previewThreadName(session.firstMessage, "Claude Session"),
                 updatedAt,
                 sizeBytes: extractThreadSizeBytes(session as Record<string, unknown>),
@@ -1868,7 +1893,7 @@ export function useThreadActions({
                 parentThreadId,
               };
               if (!prev || next.updatedAt >= prev.updatedAt) {
-                mergedById.set(id, next);
+                mergedById.set(id, mergeThreadSummaryPreservingStableIdentity(prev, next));
               }
             },
           );
@@ -2008,6 +2033,13 @@ export function useThreadActions({
         allSummaries = Array.from(mergedById.values()).sort(
           (a, b) => b.updatedAt - a.updatedAt,
         );
+        if (shouldDeferFullSessionCatalog && lastGoodThreadSummaries.length > 0) {
+          allSummaries = mergeDegradedClaudeContinuitySummaries(
+            allSummaries,
+            lastGoodThreadSummaries,
+            hiddenSharedBindingIds,
+          );
+        }
         if (hasFreshGeminiCache && cachedGemini.sessions.length > 0) {
           allSummaries = mergeGeminiSessionSummaries(
             allSummaries,
@@ -2088,10 +2120,17 @@ export function useThreadActions({
             });
           }
         } else if (degradedPartialSource) {
+          if (shouldApplyClaudeSidebarContinuity(degradedPartialSource)) {
+            visibleSummaries = mergeDegradedClaudeContinuitySummaries(
+              visibleSummaries,
+              lastGoodThreadSummaries,
+              hiddenSharedBindingIds,
+            );
+          }
           if (shouldApplyCodexSidebarContinuity(degradedPartialSource)) {
             visibleSummaries = mergeDegradedCodexContinuitySummaries(
               visibleSummaries,
-              getLastGoodThreadSummaries(workspace.id),
+              lastGoodThreadSummaries,
             );
           }
           visibleSummaries = markThreadSummariesDegraded(

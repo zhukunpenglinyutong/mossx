@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-kanban-linked-issues-and-bulk-delete. Update Purpose after archive.
+Defines the composer-kanban-linked-issues-surface behavior contract, covering 输入区上方展示 Kanban 关联问题.
 
 ## Requirements
 

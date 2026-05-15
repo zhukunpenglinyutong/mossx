@@ -1,7 +1,9 @@
 # file-tree-visual-consistency Specification
 
 ## Purpose
-TBD - created by archiving change unify-file-tree-visual-style. Update Purpose after archive.
+
+Defines the file-tree-visual-consistency behavior contract, covering 多文件树视图 SHALL 采用统一视觉规范.
+
 ## Requirements
 ### Requirement: 多文件树视图 SHALL 采用统一视觉规范
 系统 SHALL 在目标面板中使用统一的文件树视觉规范，包括行高、缩进、图标尺寸、圆角、分组容器样式与计数徽标样式。

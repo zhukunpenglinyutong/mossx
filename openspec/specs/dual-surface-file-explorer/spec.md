@@ -1,7 +1,9 @@
 # dual-surface-file-explorer Specification
 
 ## Purpose
-TBD - created by archiving change add-detached-file-explorer-window. Update Purpose after archive.
+
+Defines the dual-surface-file-explorer behavior contract, covering Embedded and detached file explorer surfaces can coexist.
+
 ## Requirements
 ### Requirement: Embedded and detached file explorer surfaces can coexist
 

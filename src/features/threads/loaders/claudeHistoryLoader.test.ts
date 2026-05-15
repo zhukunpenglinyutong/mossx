@@ -889,6 +889,64 @@ describe("parseClaudeHistoryMessages", () => {
 });
 
 describe("createClaudeHistoryLoader", () => {
+  it("keeps issue-shaped real rows while hiding synthetic continuation rows", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        type: "user",
+        isMeta: true,
+        message: {
+          role: "user",
+          content: [{ type: "text", text: "Continue from where you left off." }],
+        },
+      },
+      {
+        type: "assistant",
+        message: {
+          role: "assistant",
+          model: "<synthetic>",
+          content: [{ type: "text", text: "No response requested." }],
+        },
+      },
+      {
+        kind: "message",
+        id: "user-real-1",
+        role: "user",
+        text: "修改应用标题为：测试APP",
+      },
+      {
+        kind: "tool",
+        id: "tool-edit-1",
+        toolType: "Edit",
+        title: "Edit",
+        text: "{\"file_path\":\"Y:\\\\04_lab\\\\testccgui\\\\main.go\"}",
+      },
+      {
+        kind: "message",
+        id: "assistant-real-1",
+        role: "assistant",
+        text: "已完成修改",
+      },
+    ]);
+
+    expect(items).toHaveLength(3);
+    expect(items.some((item) => item.kind === "message" && item.text.includes("Continue from"))).toBe(false);
+    expect(items.some((item) => item.kind === "message" && item.text.includes("No response requested"))).toBe(false);
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "message",
+          role: "user",
+          text: "修改应用标题为：测试APP",
+        }),
+        expect.objectContaining({
+          kind: "message",
+          role: "assistant",
+          text: "已完成修改",
+        }),
+      ]),
+    );
+  });
+
   it("loads claude jsonl messages and merges tool result into tool call", async () => {
     const loader = createClaudeHistoryLoader({
       workspaceId: "ws-2",

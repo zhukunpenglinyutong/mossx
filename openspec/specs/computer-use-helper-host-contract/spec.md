@@ -1,7 +1,9 @@
 # computer-use-helper-host-contract Specification
 
 ## Purpose
-TBD - created by archiving change investigate-computer-use-helper-host-contract. Update Purpose after archive.
+
+Defines the computer-use-helper-host-contract behavior contract, covering Host Contract Diagnostics MUST Be Explicit And Non-Crashing.
+
 ## Requirements
 ### Requirement: Host Contract Diagnostics MUST Be Explicit And Non-Crashing
 

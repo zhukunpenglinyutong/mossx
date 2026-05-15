@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::app_paths;
 use crate::dictation::DictationState;
-use crate::engine::EngineManager;
+use crate::engine::{EngineConfig, EngineManager, EngineType};
 use crate::shared::proxy_core;
 use crate::storage::{read_settings, read_workspaces};
 use crate::types::{AppSettings, WorkspaceEntry};
@@ -36,6 +36,49 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
+    /// Push current app_settings binary paths into the EngineManager so that
+    /// new engine sessions pick up user-configured CLI paths (e.g. reclaude).
+    /// Also drops cached Claude sessions whose bin_path is stale so the next
+    /// turn rebuilds them with the new config.
+    pub(crate) async fn sync_engine_configs_from_settings(&self) {
+        let settings = self.app_settings.lock().await.clone();
+
+        let new_claude_bin = settings.claude_bin.clone();
+        let previous_claude_bin = self
+            .engine_manager
+            .get_engine_config(EngineType::Claude)
+            .await
+            .and_then(|cfg| cfg.bin_path);
+
+        self.engine_manager
+            .set_engine_config(
+                EngineType::Claude,
+                EngineConfig {
+                    bin_path: new_claude_bin.clone(),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        if previous_claude_bin != new_claude_bin {
+            let sessions = self.engine_manager.claude_manager.list_sessions().await;
+            for (workspace_id, _session) in sessions {
+                self.engine_manager.remove_claude_session(&workspace_id).await;
+            }
+        }
+
+        self.engine_manager
+            .set_engine_config(
+                EngineType::Codex,
+                EngineConfig {
+                    bin_path: settings.codex_bin.clone(),
+                    custom_args: settings.codex_args.clone(),
+                    ..Default::default()
+                },
+            )
+            .await;
+    }
+
     pub(crate) fn load(app: &AppHandle) -> Self {
         let data_dir = app
             .path()

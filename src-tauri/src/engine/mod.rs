@@ -12,6 +12,8 @@ pub mod claude_history;
 #[cfg(test)]
 mod claude_history_delete_tests;
 pub(crate) mod claude_history_entries;
+#[cfg(test)]
+mod claude_history_issue529_tests;
 pub(crate) mod claude_history_large_payload;
 #[cfg(test)]
 mod claude_history_large_payload_tests;

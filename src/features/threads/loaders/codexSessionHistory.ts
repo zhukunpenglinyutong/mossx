@@ -46,6 +46,31 @@ const SKIP_GENERIC_TOOL_CALL_NAMES = new Set([
   "update_plan",
   "request_user_input",
 ]);
+const PROJECT_MEMORY_CONTEXT_PREFIX_REGEX =
+  /^<project-memory(?:-pack)?\b[\s\S]*?<\/project-memory(?:-pack)?>\s*/i;
+
+function hasProjectMemoryContextPrefix(text: string) {
+  return PROJECT_MEMORY_CONTEXT_PREFIX_REGEX.test(text.trimStart());
+}
+
+function restoreProjectMemoryContextPrefix(
+  item: ConversationItem | null,
+  rawText: string,
+): ConversationItem | null {
+  if (
+    !item ||
+    item.kind !== "message" ||
+    item.role !== "user" ||
+    !hasProjectMemoryContextPrefix(rawText) ||
+    hasProjectMemoryContextPrefix(item.text)
+  ) {
+    return item;
+  }
+  return {
+    ...item,
+    text: rawText.trimStart(),
+  };
+}
 
 function findDuplicateReasoningIndex(
   items: ConversationItem[],
@@ -501,7 +526,7 @@ function buildUserMessageItem(payload: Record<string, unknown>, fallbackId: stri
   const selectedAgentIcon = asString(
     payload.selectedAgentIcon ?? payload.selected_agent_icon ?? "",
   ).trim();
-  return buildConversationItem({
+  const message = buildConversationItem({
     id: extractCodexMessageId(payload, fallbackId),
     type: "userMessage",
     ...(content.length > 0 ? { content } : { content: [{ type: "text", text }] }),
@@ -512,6 +537,7 @@ function buildUserMessageItem(payload: Record<string, unknown>, fallbackId: stri
     ...(selectedAgentName ? { selectedAgentName } : {}),
     ...(selectedAgentIcon ? { selectedAgentIcon } : {}),
   });
+  return restoreProjectMemoryContextPrefix(message, text);
 }
 
 function buildCommandExecutionItem(

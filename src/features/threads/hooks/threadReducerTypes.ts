@@ -31,6 +31,8 @@ export type ThreadActivityStatus = {
   codexCompactionLifecycleState?: CodexCompactionLifecycleState;
   codexCompactionCompletedAt?: number | null;
   lastTokenUsageUpdatedAt?: number | null;
+  codexSilentSuspectedAt?: number | null;
+  codexSilentSuspectedSource?: string | null;
 };
 
 export type ThreadBackgroundActivityProjection = {
@@ -117,6 +119,13 @@ export type ThreadAction =
   | { type: "markHeartbeat"; threadId: string; pulse: number }
   | { type: "markContinuationEvidence"; threadId: string }
   | { type: "markTerminalSettlement"; threadId: string }
+  | {
+      type: "markCodexSilentSuspected";
+      threadId: string;
+      timestamp: number;
+      source: string;
+    }
+  | { type: "clearCodexSilentSuspected"; threadId: string }
   | {
       type: "finalizePendingToolStatuses";
       threadId: string;

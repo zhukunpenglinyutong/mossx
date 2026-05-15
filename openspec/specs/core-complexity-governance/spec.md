@@ -1,7 +1,9 @@
 # core-complexity-governance Specification
 
 ## Purpose
-TBD - created by archiving change reduce-core-complexity-preserve-behavior. Update Purpose after archive.
+
+Defines the core-complexity-governance behavior contract, covering Behavior-Preserving Core Extraction.
+
 ## Requirements
 ### Requirement: Behavior-Preserving Core Extraction
 

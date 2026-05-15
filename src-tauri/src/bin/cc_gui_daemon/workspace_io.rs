@@ -24,6 +24,45 @@ pub(crate) struct WorkspaceFilesResponse {
     gitignored_files: Vec<String>,
     #[serde(default)]
     gitignored_directories: Vec<String>,
+    #[serde(default = "default_workspace_scan_state")]
+    scan_state: WorkspaceScanState,
+    #[serde(default)]
+    limit_hit: bool,
+    #[serde(default)]
+    directory_entries: Vec<WorkspaceDirectoryEntry>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceScanState {
+    Complete,
+    Partial,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceDirectoryChildState {
+    Unknown,
+    Loaded,
+    Empty,
+    Partial,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorkspaceDirectorySpecialKind {
+    Dependency,
+    BuildArtifact,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkspaceDirectoryEntry {
+    path: String,
+    child_state: WorkspaceDirectoryChildState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    special_kind: Option<WorkspaceDirectorySpecialKind>,
+    #[serde(default)]
+    has_more: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -170,6 +209,110 @@ fn sort_and_truncate_named_entries<T>(entries: &mut Vec<(String, T)>, max_entrie
     }
 }
 
+fn default_workspace_scan_state() -> WorkspaceScanState {
+    WorkspaceScanState::Complete
+}
+
+fn workspace_files_response(
+    files: Vec<String>,
+    directories: Vec<String>,
+    gitignored_files: Vec<String>,
+    gitignored_directories: Vec<String>,
+    scan_state: WorkspaceScanState,
+    limit_hit: bool,
+    directory_entries: Vec<WorkspaceDirectoryEntry>,
+) -> WorkspaceFilesResponse {
+    WorkspaceFilesResponse {
+        files,
+        directories,
+        gitignored_files,
+        gitignored_directories,
+        scan_state,
+        limit_hit,
+        directory_entries,
+    }
+}
+
+fn special_directory_kind(path: &str) -> Option<WorkspaceDirectorySpecialKind> {
+    let leaf = path.rsplit('/').next().unwrap_or_default();
+    if is_special_dependency_dir_name(leaf) {
+        return Some(WorkspaceDirectorySpecialKind::Dependency);
+    }
+    if is_special_build_artifact_dir_name(leaf) {
+        return Some(WorkspaceDirectorySpecialKind::BuildArtifact);
+    }
+    None
+}
+
+fn has_known_direct_child(parent: &str, files: &[String], directories: &[String]) -> bool {
+    let prefix = format!("{parent}/");
+    files.iter().chain(directories.iter()).any(|path| {
+        path.strip_prefix(&prefix)
+            .is_some_and(|child| !child.is_empty() && !child.contains('/'))
+    })
+}
+
+fn build_initial_directory_entries(
+    files: &[String],
+    directories: &[String],
+    scan_state: WorkspaceScanState,
+) -> Vec<WorkspaceDirectoryEntry> {
+    directories
+        .iter()
+        .map(|path| {
+            let special_kind = special_directory_kind(path);
+            let child_state = if special_kind.is_some() {
+                WorkspaceDirectoryChildState::Unknown
+            } else if has_known_direct_child(path, files, directories) {
+                match scan_state {
+                    WorkspaceScanState::Complete => WorkspaceDirectoryChildState::Loaded,
+                    WorkspaceScanState::Partial => WorkspaceDirectoryChildState::Partial,
+                }
+            } else {
+                match scan_state {
+                    WorkspaceScanState::Complete => WorkspaceDirectoryChildState::Empty,
+                    WorkspaceScanState::Partial => WorkspaceDirectoryChildState::Unknown,
+                }
+            };
+            WorkspaceDirectoryEntry {
+                path: path.clone(),
+                child_state,
+                special_kind,
+                has_more: child_state == WorkspaceDirectoryChildState::Partial,
+            }
+        })
+        .collect()
+}
+
+fn build_directory_child_entries(
+    parent_path: &str,
+    files: &[String],
+    directories: &[String],
+    scan_state: WorkspaceScanState,
+) -> Vec<WorkspaceDirectoryEntry> {
+    let parent_child_state = match scan_state {
+        WorkspaceScanState::Partial => WorkspaceDirectoryChildState::Partial,
+        WorkspaceScanState::Complete if files.is_empty() && directories.is_empty() => {
+            WorkspaceDirectoryChildState::Empty
+        }
+        WorkspaceScanState::Complete => WorkspaceDirectoryChildState::Loaded,
+    };
+    let mut entries = vec![WorkspaceDirectoryEntry {
+        path: parent_path.to_string(),
+        child_state: parent_child_state,
+        special_kind: special_directory_kind(parent_path),
+        has_more: scan_state == WorkspaceScanState::Partial,
+    }];
+
+    entries.extend(directories.iter().map(|path| WorkspaceDirectoryEntry {
+        path: path.clone(),
+        child_state: WorkspaceDirectoryChildState::Unknown,
+        special_kind: special_directory_kind(path),
+        has_more: false,
+    }));
+    entries
+}
+
 const WORKSPACE_SCAN_ENTRY_BUDGET: usize = 30_000;
 const WORKSPACE_SCAN_TIME_BUDGET: Duration = Duration::from_millis(1_200);
 const WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER: usize = 8;
@@ -279,13 +422,22 @@ pub(crate) fn list_external_spec_tree_inner(
     let mut scanned_entries = 0usize;
     let mut files = Vec::new();
     let mut directories = vec!["openspec".to_string()];
+    let mut limit_hit = false;
     if !resolved.exists {
-        return Ok(WorkspaceFilesResponse {
+        let directory_entries = build_initial_directory_entries(
+            &files,
+            &directories,
+            WorkspaceScanState::Complete,
+        );
+        return Ok(workspace_files_response(
             files,
             directories,
-            gitignored_files: Vec::new(),
-            gitignored_directories: Vec::new(),
-        });
+            Vec::new(),
+            Vec::new(),
+            WorkspaceScanState::Complete,
+            false,
+            directory_entries,
+        ));
     }
     let root = resolved.root;
 
@@ -308,6 +460,7 @@ pub(crate) fn list_external_spec_tree_inner(
 
     for entry in walker {
         if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+            limit_hit = true;
             break;
         }
         let entry = match entry {
@@ -327,10 +480,13 @@ pub(crate) fn list_external_spec_tree_inner(
         if entry.file_type().is_some_and(|ft| ft.is_dir()) {
             if directories.len() < max_directories {
                 directories.push(logical);
+            } else {
+                limit_hit = true;
             }
         } else if entry.file_type().is_some_and(|ft| ft.is_file()) {
             files.push(logical);
             if files.len() >= effective_max_files {
+                limit_hit = true;
                 break;
             }
         }
@@ -340,12 +496,21 @@ pub(crate) fn list_external_spec_tree_inner(
     files.dedup();
     directories.sort();
     directories.dedup();
-    Ok(WorkspaceFilesResponse {
+    let scan_state = if limit_hit {
+        WorkspaceScanState::Partial
+    } else {
+        WorkspaceScanState::Complete
+    };
+    let directory_entries = build_initial_directory_entries(&files, &directories, scan_state);
+    Ok(workspace_files_response(
         files,
         directories,
-        gitignored_files: Vec::new(),
-        gitignored_directories: Vec::new(),
-    })
+        Vec::new(),
+        Vec::new(),
+        scan_state,
+        limit_hit,
+        directory_entries,
+    ))
 }
 
 pub(crate) fn list_workspace_files_inner(
@@ -359,21 +524,24 @@ pub(crate) fn list_workspace_files_inner(
     let mut directories = Vec::new();
     let mut gitignored_files = Vec::new();
     let mut gitignored_directories = Vec::new();
+    let mut limit_hit = false;
     let pruned_special_directories: Arc<StdMutex<HashSet<String>>> =
         Arc::new(StdMutex::new(HashSet::new()));
 
     let repo = git2::Repository::open(root).ok();
 
     if let Ok(entries) = std::fs::read_dir(root) {
-        let mut root_entries = entries
-            .filter_map(|entry| {
-                if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
-                    return None;
-                }
-                scanned_entries += 1;
-                entry.ok()
-            })
-            .collect::<Vec<_>>();
+        let mut root_entries = Vec::new();
+        for entry in entries {
+            if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+                limit_hit = true;
+                break;
+            }
+            scanned_entries += 1;
+            if let Ok(entry) = entry {
+                root_entries.push(entry);
+            }
+        }
         root_entries.sort_by(|a, b| {
             a.file_name()
                 .to_string_lossy()
@@ -381,6 +549,7 @@ pub(crate) fn list_workspace_files_inner(
         });
         for entry in root_entries {
             if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+                limit_hit = true;
                 break;
             }
             let path = entry.path();
@@ -406,6 +575,7 @@ pub(crate) fn list_workspace_files_inner(
                     continue;
                 }
                 if directories.len() >= max_directories {
+                    limit_hit = true;
                     continue;
                 }
                 directories.push(normalized.clone());
@@ -427,12 +597,18 @@ pub(crate) fn list_workspace_files_inner(
                         &mut gitignored_files,
                         &mut gitignored_directories,
                     );
-                    return WorkspaceFilesResponse {
+                    let scan_state = WorkspaceScanState::Partial;
+                    let directory_entries =
+                        build_initial_directory_entries(&files, &directories, scan_state);
+                    return workspace_files_response(
                         files,
                         directories,
                         gitignored_files,
                         gitignored_directories,
-                    };
+                        scan_state,
+                        true,
+                        directory_entries,
+                    );
                 }
             }
         }
@@ -471,6 +647,7 @@ pub(crate) fn list_workspace_files_inner(
 
     for entry in walker {
         if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+            limit_hit = true;
             break;
         }
         scanned_entries += 1;
@@ -492,6 +669,7 @@ pub(crate) fn list_workspace_files_inner(
                 .unwrap_or(false);
             if entry.file_type().is_some_and(|ft| ft.is_dir()) {
                 if directories.len() >= max_directories {
+                    limit_hit = true;
                     continue;
                 }
                 directories.push(normalized.clone());
@@ -504,6 +682,7 @@ pub(crate) fn list_workspace_files_inner(
                     gitignored_files.push(normalized);
                 }
                 if files.len() >= max_files {
+                    limit_hit = true;
                     break;
                 }
             }
@@ -530,12 +709,21 @@ pub(crate) fn list_workspace_files_inner(
         &mut gitignored_files,
         &mut gitignored_directories,
     );
-    WorkspaceFilesResponse {
+    let scan_state = if limit_hit {
+        WorkspaceScanState::Partial
+    } else {
+        WorkspaceScanState::Complete
+    };
+    let directory_entries = build_initial_directory_entries(&files, &directories, scan_state);
+    workspace_files_response(
         files,
         directories,
         gitignored_files,
         gitignored_directories,
-    }
+        scan_state,
+        limit_hit,
+        directory_entries,
+    )
 }
 
 pub(crate) fn list_workspace_directory_children_inner(
@@ -573,11 +761,14 @@ pub(crate) fn list_workspace_directory_children_inner(
         .saturating_mul(WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER)
         .max(max_entries);
     let mut sorted_entries = Vec::new();
+    let mut limit_hit = false;
     for entry in entries {
         if scan_started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET {
+            limit_hit = true;
             break;
         }
         if sorted_entries.len() >= max_scanned_entries {
+            limit_hit = true;
             break;
         }
         if let Ok(entry) = entry {
@@ -625,6 +816,7 @@ pub(crate) fn list_workspace_directory_children_inner(
         }
 
         if files.len() + directories.len() >= max_entries {
+            limit_hit = true;
             break;
         }
     }
@@ -635,12 +827,22 @@ pub(crate) fn list_workspace_directory_children_inner(
         &mut gitignored_files,
         &mut gitignored_directories,
     );
-    Ok(WorkspaceFilesResponse {
+    let scan_state = if limit_hit {
+        WorkspaceScanState::Partial
+    } else {
+        WorkspaceScanState::Complete
+    };
+    let directory_entries =
+        build_directory_child_entries(&normalized_path, &files, &directories, scan_state);
+    Ok(workspace_files_response(
         files,
         directories,
         gitignored_files,
         gitignored_directories,
-    })
+        scan_state,
+        limit_hit,
+        directory_entries,
+    ))
 }
 
 pub(crate) fn list_external_absolute_directory_children_inner(
@@ -662,11 +864,14 @@ pub(crate) fn list_external_absolute_directory_children_inner(
         .saturating_mul(WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER)
         .max(max_entries);
     let mut sorted_entries = Vec::new();
+    let mut limit_hit = false;
     for entry in entries {
         if scan_started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET {
+            limit_hit = true;
             break;
         }
         if sorted_entries.len() >= max_scanned_entries {
+            limit_hit = true;
             break;
         }
         if let Ok(entry) = entry {
@@ -700,6 +905,7 @@ pub(crate) fn list_external_absolute_directory_children_inner(
         }
 
         if files.len() + directories.len() >= max_entries {
+            limit_hit = true;
             break;
         }
     }
@@ -708,12 +914,20 @@ pub(crate) fn list_external_absolute_directory_children_inner(
     files.dedup();
     directories.sort();
     directories.dedup();
-    Ok(WorkspaceFilesResponse {
+    let scan_state = if limit_hit {
+        WorkspaceScanState::Partial
+    } else {
+        WorkspaceScanState::Complete
+    };
+    Ok(workspace_files_response(
         files,
         directories,
-        gitignored_files: Vec::new(),
-        gitignored_directories: Vec::new(),
-    })
+        Vec::new(),
+        Vec::new(),
+        scan_state,
+        limit_hit,
+        Vec::new(),
+    ))
 }
 
 const MAX_WORKSPACE_FILE_BYTES: u64 = 400_000;

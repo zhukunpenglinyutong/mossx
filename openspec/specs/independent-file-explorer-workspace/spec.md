@@ -1,7 +1,9 @@
 # independent-file-explorer-workspace Specification
 
 ## Purpose
-TBD - created by archiving change add-detached-file-explorer-window. Update Purpose after archive.
+
+Defines the independent-file-explorer-workspace behavior contract, covering Detached explorer window provides a self-contained file browsing workspace.
+
 ## Requirements
 ### Requirement: Detached explorer window provides a self-contained file browsing workspace
 

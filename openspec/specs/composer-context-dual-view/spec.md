@@ -1,7 +1,9 @@
 # composer-context-dual-view Specification
 
 ## Purpose
-TBD - created by archiving change composer-context-dual-view-preserve-legacy. Update Purpose after archive.
+
+Defines the composer-context-dual-view behavior contract, covering Dual-View Coexistence in Composer.
+
 ## Requirements
 ### Requirement: Dual-View Coexistence in Composer
 The system SHALL support rendering a new context view alongside the legacy context view within Composer.

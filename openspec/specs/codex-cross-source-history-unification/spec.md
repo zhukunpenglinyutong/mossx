@@ -1,7 +1,9 @@
 # codex-cross-source-history-unification Specification
 
 ## Purpose
-TBD - created by archiving change fix-codex-source-switch-runtime-apply-2026-03-31. Update Purpose after archive.
+
+Defines the codex-cross-source-history-unification behavior contract, covering Codex Thread History MUST Be Unified Across Sources Per Workspace.
+
 ## Requirements
 ### Requirement: Codex Thread History MUST Be Unified Across Sources Per Workspace
 

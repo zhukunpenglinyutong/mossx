@@ -1,7 +1,9 @@
 # claude-chat-canvas-review-quick-action Specification
 
 ## Purpose
-TBD - created by archiving change add-claude-review-quick-action-2026-03-07. Update Purpose after archive.
+
+Defines the claude-chat-canvas-review-quick-action behavior contract, covering Claude 配置面板 MUST 提供 Review 快捷入口.
+
 ## Requirements
 ### Requirement: Claude 配置面板 MUST 提供 Review 快捷入口
 

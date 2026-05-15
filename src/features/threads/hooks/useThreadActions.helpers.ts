@@ -698,6 +698,66 @@ function normalizeCatalogEngine(engine: CodexCatalogSessionSummary["engine"]): T
   }
 }
 
+const GENERIC_CLAUDE_TITLE_PATTERN = /^(claude session|agent\s+\d+)$/i;
+
+function normalizeSummaryTitle(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isGenericClaudeSummaryTitle(value: string | null | undefined): boolean {
+  const normalized = normalizeSummaryTitle(value);
+  return !normalized || GENERIC_CLAUDE_TITLE_PATTERN.test(normalized);
+}
+
+function selectStableThreadSummaryName(params: {
+  previous?: ThreadSummary;
+  nextName: string;
+  mappedTitle?: string;
+  customTitle?: string;
+  engineSource: ThreadSummary["engineSource"];
+}): string {
+  const mappedTitle = normalizeSummaryTitle(params.mappedTitle);
+  if (mappedTitle) {
+    return mappedTitle;
+  }
+  const customTitle = normalizeSummaryTitle(params.customTitle);
+  if (customTitle) {
+    return customTitle;
+  }
+  if (
+    params.engineSource === "claude" &&
+    params.previous &&
+    !isGenericClaudeSummaryTitle(params.previous.name) &&
+    isGenericClaudeSummaryTitle(params.nextName)
+  ) {
+    return params.previous.name;
+  }
+  return params.nextName;
+}
+
+export function mergeThreadSummaryPreservingStableIdentity(
+  previous: ThreadSummary | undefined,
+  next: ThreadSummary,
+): ThreadSummary {
+  if (!previous || previous.id !== next.id) {
+    return next;
+  }
+  const engineSource = next.engineSource ?? previous.engineSource;
+  const merged: ThreadSummary = {
+    ...previous,
+    ...next,
+    engineSource,
+    name: selectStableThreadSummaryName({
+      previous,
+      nextName: next.name,
+      engineSource,
+    }),
+    parentThreadId: next.parentThreadId ?? previous.parentThreadId ?? null,
+    folderId: next.folderId ?? previous.folderId ?? null,
+  };
+  return merged;
+}
+
 export function mergeCodexCatalogSessionSummaries(
   baseSummaries: ThreadSummary[],
   codexSessions: CodexCatalogSessionSummary[],
@@ -729,21 +789,27 @@ export function mergeCodexCatalogSessionSummaries(
           ? session.parentSessionId
           : `claude:${session.parentSessionId}`
         : session.parentSessionId ?? null;
+    const mappedTitle = mappedTitles[session.sessionId];
+    const customTitle = getCustomName(workspaceId, session.sessionId);
+    const fallbackTitle = previewThreadName(
+      title,
+      engineSource === "claude"
+        ? "Claude Session"
+        : engineSource === "gemini"
+          ? "Gemini Session"
+          : engineSource === "opencode"
+            ? "OpenCode Session"
+            : "Codex Session",
+    );
     const next: ThreadSummary = {
       id: session.sessionId,
-      name:
-        mappedTitles[session.sessionId] ||
-        getCustomName(workspaceId, session.sessionId) ||
-        previewThreadName(
-          title,
-          engineSource === "claude"
-            ? "Claude Session"
-            : engineSource === "gemini"
-              ? "Gemini Session"
-              : engineSource === "opencode"
-                ? "OpenCode Session"
-                : "Codex Session",
-        ),
+      name: selectStableThreadSummaryName({
+        previous: prev,
+        nextName: fallbackTitle,
+        mappedTitle,
+        customTitle,
+        engineSource,
+      }),
       updatedAt,
       sizeBytes: session.sizeBytes,
       engineSource,
@@ -755,7 +821,7 @@ export function mergeCodexCatalogSessionSummaries(
       parentThreadId,
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {
-      mergedById.set(session.sessionId, next);
+      mergedById.set(session.sessionId, mergeThreadSummaryPreservingStableIdentity(prev, next));
     }
   });
   return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
@@ -810,6 +876,61 @@ export function mergeDegradedCodexContinuitySummaries(
   baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
   fallbackSummaries.forEach((entry) => {
     if (!isRetainableCodexContinuitySummary(entry) || mergedById.has(entry.id)) {
+      return;
+    }
+    mergedById.set(entry.id, entry);
+  });
+  return Array.from(mergedById.values()).sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+function isRetainableClaudeContinuitySummary(summary: ThreadSummary): boolean {
+  if (inferThreadEngineSource(summary.id, summary) !== "claude") {
+    return false;
+  }
+  if (summary.threadKind === "shared") {
+    return false;
+  }
+  if ((summary.archivedAt ?? 0) > 0) {
+    return false;
+  }
+  return true;
+}
+
+export function shouldApplyClaudeSidebarContinuity(partialSource: string | null): boolean {
+  if (!partialSource) {
+    return false;
+  }
+  const normalized = partialSource.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.includes("claude")
+    || normalized.includes("catalog")
+    || normalized.includes("first-page")
+    || normalized.includes("empty-thread-list")
+    || normalized.includes("partial")
+    || normalized.includes("timeout")
+  );
+}
+
+export function mergeDegradedClaudeContinuitySummaries(
+  baseSummaries: ThreadSummary[],
+  fallbackSummaries: ThreadSummary[],
+  excludedThreadIds: ReadonlySet<string> = new Set(),
+): ThreadSummary[] {
+  if (fallbackSummaries.length === 0) {
+    return baseSummaries;
+  }
+  const mergedById = new Map<string, ThreadSummary>();
+  baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
+  fallbackSummaries.forEach((entry) => {
+    if (excludedThreadIds.has(entry.id) || !isRetainableClaudeContinuitySummary(entry)) {
+      return;
+    }
+    const previous = mergedById.get(entry.id);
+    if (previous) {
+      mergedById.set(entry.id, mergeThreadSummaryPreservingStableIdentity(entry, previous));
       return;
     }
     mergedById.set(entry.id, entry);

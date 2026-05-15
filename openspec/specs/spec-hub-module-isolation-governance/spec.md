@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change spec-hub-speckit-openspec-isolation-audit-2026-02-25. Update Purpose after archive.
+Defines the spec-hub-module-isolation-governance behavior contract, covering Provider Scope Isolation Governance.
 
 ## Requirements
 

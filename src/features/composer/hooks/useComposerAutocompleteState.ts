@@ -12,6 +12,7 @@ import {
 import { isComposingEvent } from "../../../utils/keys";
 import { projectMemoryFacade } from "../../project-memory/services/projectMemoryFacade";
 import { noteCardsFacade } from "../../note-cards/services/noteCardsFacade";
+import { resolveProjectMemoryDetailText } from "../../project-memory/utils/projectMemoryDisplay";
 
 type Skill = { name: string; description?: string };
 type ManualMemorySuggestion = {
@@ -242,11 +243,7 @@ export function useComposerAutocompleteState({
               id: item.id,
               title: item.title?.trim() || item.summary?.trim() || item.id,
               summary: item.summary?.trim() || "",
-              detail:
-                item.detail?.trim() ||
-                item.cleanText?.trim() ||
-                item.summary?.trim() ||
-                "",
+              detail: resolveProjectMemoryDetailText(item),
               kind: item.kind || "note",
               importance: item.importance || "normal",
               updatedAt: item.updatedAt || item.createdAt || Date.now(),

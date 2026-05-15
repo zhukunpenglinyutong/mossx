@@ -24,6 +24,8 @@ import {
   readWorkspaceFile,
   trashWorkspaceItem,
   writeWorkspaceFile,
+  type WorkspaceDirectoryEntry,
+  type WorkspaceDirectoryChildState,
 } from "../../../services/tauri";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
@@ -51,6 +53,8 @@ type FileTreeNode = {
   type: "file" | "folder";
   children: FileTreeNode[];
   isLazyLoadable?: boolean;
+  childState?: WorkspaceDirectoryChildState;
+  hasMore?: boolean;
 };
 
 type VisibleTreeNodeEntry = {
@@ -65,6 +69,7 @@ type FileTreePanelProps = {
   gitRoot?: string | null;
   files: string[];
   directories?: string[];
+  directoryMetadata?: WorkspaceDirectoryEntry[];
   isLoading: boolean;
   loadError?: string | null;
   filePanelMode: PanelTabId;
@@ -100,6 +105,8 @@ type FileTreeBuildNode = {
   type: "file" | "folder";
   children: Map<string, FileTreeBuildNode>;
   isLazyLoadable: boolean;
+  childState?: WorkspaceDirectoryChildState;
+  hasMore: boolean;
 };
 
 const EMPTY_DIRECTORIES: string[] = [];
@@ -144,6 +151,8 @@ const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
   ".dart_tool",
 ]);
 const CROSS_WINDOW_TREE_DRAG_REBROADCAST_THROTTLE_MS = 120;
+const EMPTY_DIRECTORY_METADATA: WorkspaceDirectoryEntry[] = [];
+
 function setFileTreeDragBridge(paths: string[]) {
   if (typeof window === "undefined") {
     return;
@@ -476,6 +485,7 @@ function buildTree(
   files: string[],
   directories: string[],
   lazyLoadableDirectories: Set<string>,
+  directoryMetadataByPath: Map<string, WorkspaceDirectoryEntry>,
 ): { nodes: FileTreeNode[]; folderPaths: Set<string> } {
   const root = new Map<string, FileTreeBuildNode>();
   const addNode = (
@@ -484,6 +494,8 @@ function buildTree(
     path: string,
     type: "file" | "folder",
     isLazyLoadable = false,
+    childState?: WorkspaceDirectoryChildState,
+    hasMore = false,
   ) => {
     const existing = map.get(name);
     if (existing) {
@@ -493,6 +505,12 @@ function buildTree(
       if (isLazyLoadable) {
         existing.isLazyLoadable = true;
       }
+      if (childState) {
+        existing.childState = childState;
+      }
+      if (hasMore) {
+        existing.hasMore = true;
+      }
       return existing;
     }
     const node: FileTreeBuildNode = {
@@ -501,6 +519,8 @@ function buildTree(
       type,
       children: new Map(),
       isLazyLoadable,
+      childState,
+      hasMore,
     };
     map.set(name, node);
     return node;
@@ -517,12 +537,15 @@ function buildTree(
       const isLeaf = index === parts.length - 1;
       const nextPath = currentPath ? `${currentPath}/${segment}` : segment;
       const nodeType: "file" | "folder" = isLeaf ? leafType : "folder";
+      const metadata = nodeType === "folder" ? directoryMetadataByPath.get(nextPath) : undefined;
       const node = addNode(
         currentMap,
         segment,
         nextPath,
         nodeType,
         nodeType === "folder" && lazyLoadableDirectories.has(nextPath),
+        metadata?.child_state,
+        Boolean(metadata?.has_more),
       );
       if (nodeType === "folder") {
         currentMap = node.children;
@@ -587,6 +610,8 @@ function buildTree(
             type: "folder" as const,
             children: toArray(collapsed.node.children),
             isLazyLoadable: collapsed.node.isLazyLoadable,
+            childState: collapsed.node.childState,
+            hasMore: collapsed.node.hasMore,
           };
         }
         return {
@@ -716,6 +741,7 @@ export function FileTreePanel({
   gitRoot = null,
   files,
   directories,
+  directoryMetadata = EMPTY_DIRECTORY_METADATA,
   isLoading,
   loadError = null,
   filePanelMode: _filePanelMode,
@@ -784,6 +810,9 @@ export function FileTreePanel({
   const [lazyGitignoredFiles, setLazyGitignoredFiles] = useState<Set<string>>(new Set());
   const [lazyGitignoredDirectories, setLazyGitignoredDirectories] = useState<Set<string>>(new Set());
   const [lazyLoadableDirectories, setLazyLoadableDirectories] = useState<Set<string>>(new Set());
+  const [lazyDirectoryMetadata, setLazyDirectoryMetadata] = useState<Map<string, WorkspaceDirectoryEntry>>(
+    new Map(),
+  );
   const [loadedLazyDirectories, setLoadedLazyDirectories] = useState<Set<string>>(new Set());
   const [loadingLazyDirectories, setLoadingLazyDirectories] = useState<Set<string>>(new Set());
   const [lazyDirectoryLoadErrors, setLazyDirectoryLoadErrors] = useState<Map<string, string>>(
@@ -831,15 +860,31 @@ export function FileTreePanel({
     lazyGitignoredDirectories.forEach((path) => next.add(path));
     return next;
   }, [ignoredDirectoryEntries, lazyGitignoredDirectories]);
+  const directoryMetadataByPath = useMemo(() => {
+    const next = new Map<string, WorkspaceDirectoryEntry>();
+    directoryMetadata.forEach((entry) => {
+      if (entry.path) {
+        next.set(entry.path, entry);
+      }
+    });
+    lazyDirectoryMetadata.forEach((entry, path) => {
+      next.set(path, entry);
+    });
+    return next;
+  }, [directoryMetadata, lazyDirectoryMetadata]);
   const seededLazyLoadableDirectories = useMemo(() => {
     const result = new Set<string>();
     mergedDirectories.forEach((path) => {
       if (isSpecialDirectoryPath(path)) {
         result.add(path);
       }
+      const childState = directoryMetadataByPath.get(path)?.child_state;
+      if (childState === "unknown" || childState === "partial") {
+        result.add(path);
+      }
     });
     return result;
-  }, [mergedDirectories]);
+  }, [directoryMetadataByPath, mergedDirectories]);
   const effectiveLazyLoadableDirectories = useMemo(() => {
     const result = new Set(seededLazyLoadableDirectories);
     lazyLoadableDirectories.forEach((path) => result.add(path));
@@ -874,9 +919,11 @@ export function FileTreePanel({
       mergedFiles,
       mergedDirectories,
       effectiveLazyLoadableDirectories,
+      directoryMetadataByPath,
     ),
     [
       effectiveLazyLoadableDirectories,
+      directoryMetadataByPath,
       mergedDirectories,
       mergedFiles,
     ],
@@ -1022,6 +1069,9 @@ export function FileTreePanel({
           next.add(path);
         }
       });
+      if (next.size === prev.size && [...next].every((path) => prev.has(path))) {
+        return prev;
+      }
       return next;
     });
   }, [folderPaths]);
@@ -1084,6 +1134,7 @@ export function FileTreePanel({
     setLazyGitignoredFiles(new Set());
     setLazyGitignoredDirectories(new Set());
     setLazyLoadableDirectories(new Set());
+    setLazyDirectoryMetadata(new Map());
     setLoadedLazyDirectories(new Set());
     setLoadingLazyDirectories(new Set());
     setLazyDirectoryLoadErrors(new Map());
@@ -1142,6 +1193,11 @@ export function FileTreePanel({
         const nextGitignoredDirectories = Array.isArray(response.gitignored_directories)
           ? response.gitignored_directories
           : [];
+        const nextDirectoryMetadata = Array.isArray(response.directory_entries)
+          ? response.directory_entries.filter((entry): entry is WorkspaceDirectoryEntry =>
+              Boolean(entry && typeof entry.path === "string" && typeof entry.child_state === "string"),
+            )
+          : [];
 
         setLazyFiles((prev) => {
           const next = new Set(prev);
@@ -1156,6 +1212,26 @@ export function FileTreePanel({
         setLazyLoadableDirectories((prev) => {
           const next = new Set(prev);
           nextDirectories.forEach((entry) => next.add(entry));
+          nextDirectoryMetadata.forEach((entry) => {
+            if (entry.child_state === "unknown" || entry.child_state === "partial") {
+              next.add(entry.path);
+            }
+            if (entry.child_state === "empty" || entry.child_state === "loaded") {
+              next.delete(entry.path);
+            }
+          });
+          return next;
+        });
+        setLazyDirectoryMetadata((prev) => {
+          const next = new Map(prev);
+          if (nextDirectoryMetadata.length === 0) {
+            const childState = nextFiles.length === 0 && nextDirectories.length === 0
+              ? "empty"
+              : "loaded";
+            next.set(path, { path, child_state: childState });
+          } else {
+            nextDirectoryMetadata.forEach((entry) => next.set(entry.path, entry));
+          }
           return next;
         });
         setLazyGitignoredFiles((prev) => {

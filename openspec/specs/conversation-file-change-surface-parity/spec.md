@@ -1,7 +1,9 @@
 # conversation-file-change-surface-parity Specification
 
 ## Purpose
-TBD - created by archiving change normalize-conversation-file-change-surfaces. Update Purpose after archive.
+
+Defines the conversation-file-change-surface-parity behavior contract, covering Conversation File-Change Facts MUST Normalize Into Shared Canonical Entries.
+
 ## Requirements
 ### Requirement: Conversation File-Change Facts MUST Normalize Into Shared Canonical Entries
 

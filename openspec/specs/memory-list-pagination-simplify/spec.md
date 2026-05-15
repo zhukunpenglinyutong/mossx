@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change t1-3-ui-memory-list-improvements. Update Purpose after archive.
+Defines the memory-list-pagination-simplify behavior contract, covering 图标化分页导航.
 
 ## Requirements
 

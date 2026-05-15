@@ -155,6 +155,7 @@ pub(crate) async fn update_app_settings(
             return Err(message);
         }
     }
+    state.sync_engine_configs_from_settings().await;
     let window_theme = resolve_window_theme_preference(&updated);
     let _ = window::apply_window_appearance(&window, window_theme.as_str());
     Ok(updated)

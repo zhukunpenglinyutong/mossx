@@ -1,14 +1,14 @@
-use serde_json::json;
+use serde_json::{json, Value};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::backend::events::AppServerEvent;
 use crate::runtime::RuntimeManager;
 use crate::types::WorkspaceEntry;
 
-use super::super::claude::ClaudeSession;
+use super::super::claude::{ClaudeSession, ClaudeStreamTiming};
 use super::super::events::{
     engine_event_to_app_server_event_with_turn_context, resolve_claude_realtime_item_id,
     EngineEvent,
@@ -163,8 +163,96 @@ fn is_claude_realtime_delta(event: &EngineEvent) -> bool {
     )
 }
 
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
+fn saturating_gap_ms(later: u64, earlier: Option<u64>) -> Option<u64> {
+    earlier.map(|earlier_ms| later.saturating_sub(earlier_ms))
+}
+
+fn attach_claude_stream_timing(
+    payload: &mut AppServerEvent,
+    stream_timing: Option<&ClaudeStreamTiming>,
+    forwarder_received_at_ms: u64,
+    app_server_emitted_at_ms: u64,
+) {
+    let Some(stream_timing) = stream_timing else {
+        return;
+    };
+    let Some(params) = payload
+        .message
+        .get_mut("params")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    params.insert(
+        "ccguiTiming".to_string(),
+        json!({
+            "source": "claude-stream",
+            "stdoutReceivedAtMs": stream_timing.stdout_received_at_ms,
+            "processSpawnStartedAtMs": stream_timing.process_spawn_started_at_ms,
+            "processSpawnedAtMs": stream_timing.process_spawned_at_ms,
+            "stdinWriteStartedAtMs": stream_timing.stdin_write_started_at_ms,
+            "stdinClosedAtMs": stream_timing.stdin_closed_at_ms,
+            "turnStartedAtMs": stream_timing.turn_started_at_ms,
+            "firstStdoutLineAtMs": stream_timing.first_stdout_line_at_ms,
+            "firstValidStreamEventAtMs": stream_timing.first_valid_stream_event_at_ms,
+            "firstTextDeltaAtMs": stream_timing.first_text_delta_at_ms,
+            "sessionEmittedAtMs": stream_timing.session_emitted_at_ms,
+            "forwarderReceivedAtMs": forwarder_received_at_ms,
+            "appServerEmittedAtMs": app_server_emitted_at_ms,
+            "spawnToStdinClosedMs": saturating_gap_ms(
+                stream_timing.stdin_closed_at_ms.unwrap_or(stream_timing.session_emitted_at_ms),
+                stream_timing.process_spawn_started_at_ms,
+            ),
+            "stdinClosedToFirstStdoutMs": stream_timing.first_stdout_line_at_ms.and_then(
+                |first_stdout_line_at_ms| saturating_gap_ms(
+                    first_stdout_line_at_ms,
+                    stream_timing.stdin_closed_at_ms,
+                ),
+            ),
+            "firstStdoutToFirstValidEventMs": stream_timing.first_valid_stream_event_at_ms.and_then(
+                |first_valid_stream_event_at_ms| saturating_gap_ms(
+                    first_valid_stream_event_at_ms,
+                    stream_timing.first_stdout_line_at_ms,
+                ),
+            ),
+            "firstValidEventToFirstTextDeltaMs": stream_timing.first_text_delta_at_ms.and_then(
+                |first_text_delta_at_ms| saturating_gap_ms(
+                    first_text_delta_at_ms,
+                    stream_timing.first_valid_stream_event_at_ms,
+                ),
+            ),
+            "stdinClosedToFirstTextDeltaMs": stream_timing.first_text_delta_at_ms.and_then(
+                |first_text_delta_at_ms| saturating_gap_ms(
+                    first_text_delta_at_ms,
+                    stream_timing.stdin_closed_at_ms,
+                ),
+            ),
+            "stdoutToSessionEmitMs": saturating_gap_ms(
+                stream_timing.session_emitted_at_ms,
+                stream_timing.stdout_received_at_ms,
+            ),
+            "sessionEmitToForwarderMs": forwarder_received_at_ms
+                .saturating_sub(stream_timing.session_emitted_at_ms),
+            "forwarderToAppServerEmitMs": app_server_emitted_at_ms
+                .saturating_sub(forwarder_received_at_ms),
+            "stdoutToAppServerEmitMs": saturating_gap_ms(
+                app_server_emitted_at_ms,
+                stream_timing.stdout_received_at_ms,
+            ),
+        }),
+    );
+}
+
 pub(crate) async fn handle_claude_forwarder_event<R, E>(
     event: EngineEvent,
+    stream_timing: Option<&ClaudeStreamTiming>,
     state: &mut ClaudeForwarderState,
     runtime_ops: &R,
     emit: &mut E,
@@ -174,6 +262,7 @@ where
     E: FnMut(AppServerEvent),
 {
     let event_ingress_at = Instant::now();
+    let forwarder_received_at_ms = unix_timestamp_ms();
     state.event_count = state.event_count.saturating_add(1);
     let is_terminal = event.is_terminal();
 
@@ -213,14 +302,21 @@ where
         }
     }
 
-    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
+    if let Some(mut payload) = engine_event_to_app_server_event_with_turn_context(
         &event,
         &state.current_thread_id,
         resolve_claude_realtime_item_id(&event, &state.assistant_item_id, &state.reasoning_item_id),
         Some(&state.turn_id),
     ) {
-        emit(payload);
         let emitted_at = Instant::now();
+        let app_server_emitted_at_ms = unix_timestamp_ms();
+        attach_claude_stream_timing(
+            &mut payload,
+            stream_timing,
+            forwarder_received_at_ms,
+            app_server_emitted_at_ms,
+        );
+        emit(payload);
         state.note_emit_gap(emitted_at);
         if is_claude_realtime_delta(&event) {
             state.delta_count = state.delta_count.saturating_add(1);

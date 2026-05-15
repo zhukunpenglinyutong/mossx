@@ -26,6 +26,7 @@ import { CompletionDropdown, Dropdown } from './Dropdown/index.js';
 import { PromptEnhancerDialog } from './PromptEnhancerDialog.js';
 import { LocalImage } from '../../../../components/common/LocalImage';
 import { Markdown } from '../../../messages/components/Markdown';
+import { resolveManualMemoryPreview } from '../../utils/manualMemoryPreview';
 
 interface CompletionController {
   isOpen: boolean;
@@ -75,8 +76,6 @@ const COLLAPSED_NOTE_CARD_PREVIEW_ATTACHMENT_LIMIT = 3;
 
 const MEMORY_DETAIL_SECTION_REGEX =
   /(用户输入|助手输出摘要|助手输出|User input|Assistant summary|Assistant output)[:：]/gi;
-const MEMORY_USER_INPUT_REGEX =
-  /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
 
 function asString(value: unknown) {
   return typeof value === 'string' ? value : '';
@@ -177,18 +176,6 @@ function parseMemoryPreviewSections(text: string): MemoryPreviewSection[] {
   return sections;
 }
 
-function getMemoryUserInputText(detail: string) {
-  const normalized = detail.trim();
-  if (!normalized) {
-    return '';
-  }
-  const matched = normalized.match(MEMORY_USER_INPUT_REGEX);
-  if (!matched || !matched[1]) {
-    return '';
-  }
-  return matched[1].replace(/\s+/g, ' ').trim();
-}
-
 function toMemoryDropdownData(item: DropdownItemData): MemoryDropdownData | null {
   const record = (item.data ?? {}) as Record<string, unknown>;
   const memoryId = asString(record.id) || item.id.replace(/^memory:/, '');
@@ -253,6 +240,8 @@ export function ChatInputBoxFooter({
   onCodexSpeedModeChange,
   onCodexReviewQuickStart,
   onForkQuickStart,
+  memoryReferenceArmed,
+  onToggleMemoryReference,
   onSubmit,
   onStop,
   onModeSelect,
@@ -315,6 +304,8 @@ export function ChatInputBoxFooter({
   onCodexSpeedModeChange?: (mode: 'standard' | 'fast') => void;
   onCodexReviewQuickStart?: () => void;
   onForkQuickStart?: () => void;
+  memoryReferenceArmed?: boolean;
+  onToggleMemoryReference?: () => void;
   onSubmit: () => void;
   onStop?: () => void;
   onModeSelect?: (mode: PermissionMode) => void;
@@ -539,6 +530,8 @@ export function ChatInputBoxFooter({
         onCodexSpeedModeChange={onCodexSpeedModeChange}
         onCodexReviewQuickStart={onCodexReviewQuickStart}
         onForkQuickStart={onForkQuickStart}
+        memoryReferenceArmed={memoryReferenceArmed}
+        onToggleMemoryReference={onToggleMemoryReference}
         onSubmit={onSubmit}
         onStop={onStop}
         onModeSelect={onModeSelect}
@@ -788,9 +781,16 @@ export function ChatInputBoxFooter({
               {memoryEntries.map(({ item, index, memory }) => {
                 const memoryId = memory?.id ?? item.id;
                 const selected = selectedManualMemoryIdSet.has(memoryId);
+                const selectedMemoryIndex = selectedManualMemoryIds.indexOf(memoryId);
                 const isActive = index === memoryCompletion.activeIndex;
-                const detail = memory?.detail || '';
-                const displayTitle = getMemoryUserInputText(detail) || memory?.title || item.label;
+                const preview = resolveManualMemoryPreview({
+                  index: selectedMemoryIndex >= 0 ? `[M${selectedMemoryIndex + 1}]` : null,
+                  label: item.label,
+                  title: memory?.title,
+                  summary: memory?.summary,
+                  detail: memory?.detail,
+                  description: item.description,
+                });
                 const tags = (memory?.tags || []).slice(0, 3);
                 const importanceTone = normalizeMemoryImportance(memory?.importance);
                 return (
@@ -810,7 +810,10 @@ export function ChatInputBoxFooter({
                       {selected ? <CheckCircle2 size={14} /> : <Circle size={14} />}
                     </span>
                     <span className="composer-memory-picker-card-main">
-                      <span className="composer-memory-picker-card-title">{displayTitle}</span>
+                      <span className="composer-memory-picker-card-title">{preview.title}</span>
+                      <span className="composer-memory-picker-card-summary">
+                        {preview.summary}
+                      </span>
                       <span className="composer-memory-picker-card-meta">
                         <span className="composer-memory-picker-card-meta-item">
                           <Layers3 size={12} />

@@ -1,7 +1,9 @@
 # editable-workspace-diff-review-surface Specification
 
 ## Purpose
-TBD - created by archiving change add-editable-workspace-diff-review-surface. Update Purpose after archive.
+
+Defines the editable-workspace-diff-review-surface behavior contract, covering Workspace-Backed Diff Review MUST Support In-Place Editing.
+
 ## Requirements
 ### Requirement: Workspace-Backed Diff Review MUST Support In-Place Editing
 

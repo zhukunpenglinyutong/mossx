@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type {
   AccessMode,
@@ -25,7 +26,7 @@ import {
   engineSendMessage as engineSendMessageService,
   engineInterrupt as engineInterruptService,
   listGeminiSessions as listGeminiSessionsService,
-  projectMemoryCaptureAuto as projectMemoryCaptureAutoService,
+  loadClaudeSession as loadClaudeSessionService,
 } from "../../../services/tauri";
 import { sendSharedSessionTurn } from "../../shared-session/runtime/sendSharedSessionTurn";
 import { projectMemoryFacade } from "../../project-memory/services/projectMemoryFacade";
@@ -33,6 +34,11 @@ import {
   injectSelectedMemoriesContext,
   type InjectionResult,
 } from "../../project-memory/utils/memoryContextInjection";
+import {
+  injectMemoryScoutBriefContext,
+  scoutProjectMemory,
+  type MemoryBrief,
+} from "../../project-memory/utils/memoryScout";
 import { noteCardsFacade } from "../../note-cards/services/noteCardsFacade";
 import {
   injectSelectedNoteCardsContext,
@@ -95,6 +101,7 @@ import {
   resolveCodexAcceptedTurnFact,
   shouldDeferCodexActivityUntilTurnAccepted,
 } from "../utils/codexConversationLiveness";
+import { parseClaudeHistoryMessages } from "../loaders/claudeHistoryLoader";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -108,6 +115,7 @@ type SendMessageOptions = {
   resumeTurnId?: string | null;
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  memoryReferenceEnabled?: boolean;
   selectedNoteCardIds?: string[];
   selectedAgent?: {
     id: string;
@@ -117,6 +125,14 @@ type SendMessageOptions = {
   } | null;
   codexInvalidThreadRetryAttempted?: boolean;
 };
+
+type SendMessageToThreadFn = (
+  workspace: WorkspaceInfo,
+  threadId: string,
+  text: string,
+  images?: string[],
+  options?: SendMessageOptions,
+) => Promise<void>;
 
 type InterruptTurnOptions = {
   reason?: "user-stop" | "queue-fusion" | "plan-handoff";
@@ -137,6 +153,26 @@ type RunWithCreateSessionLoading = <T>(
 const AGENT_PROMPT_HEADER = "## Agent Role and Instructions";
 const AGENT_PROMPT_NAME_PREFIX = "Agent Name:";
 const AGENT_PROMPT_ICON_PREFIX = "Agent Icon:";
+
+function buildLocalizedMemoryScoutPreviewText(brief: MemoryBrief, t: TFunction) {
+  if (brief.status === "ok") {
+    const titles = brief.items.map((item) => item.title).slice(0, 3).join("；");
+    return t("threads.memoryReferenceReferenced", {
+      count: brief.items.length,
+      titlesSuffix: titles
+        ? t("threads.memoryReferenceTitlesSuffix", { titles })
+        : "",
+    });
+  }
+  if (brief.status === "timeout") {
+    return t("threads.memoryReferenceTimeout");
+  }
+  if (brief.status === "error") {
+    return t("threads.memoryReferenceError");
+  }
+  return t("threads.memoryReferenceNoRelated");
+}
+
 const isClaudePendingThreadAwaitingNativeSession = (
   threadId: string,
   params: {
@@ -167,6 +203,42 @@ const shouldEmitThreadMessagingDevLogs = (() => {
     return false;
   }
 })();
+const MEMORY_SCOUT_TIMEOUT_MS = 1500;
+
+function extractClaudeCandidateSessionId(response: Record<string, unknown>): string | null {
+  const candidate = extractSessionIdFromEngineSendResponse(response);
+  return candidate && candidate !== "pending" ? candidate : null;
+}
+
+function hasClaudeTranscriptRebindEvidence(items: ConversationItem[]): boolean {
+  return items.some((item) => {
+    if (item.kind === "message") {
+      return item.role === "assistant";
+    }
+    return item.kind === "tool" || item.kind === "reasoning";
+  });
+}
+
+function withMemoryScoutTimeout(action: Promise<MemoryBrief>, timeoutMs = MEMORY_SCOUT_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  return Promise.race<MemoryBrief>([
+    action,
+    new Promise((resolve) => {
+      window.setTimeout(() => {
+        resolve({
+          status: "timeout",
+          query: "",
+          memories: [],
+          items: [],
+          conflicts: [],
+          truncated: false,
+          elapsedMs: Date.now() - startedAt,
+          retrievalMode: "lexical",
+        });
+      }, timeoutMs);
+    }),
+  ]);
+}
 
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -301,8 +373,10 @@ export function useThreadMessaging({
     codexCompactionInFlightByThreadRef ?? internalCodexCompactionInFlightByThreadRef;
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
   const claudePendingThreadAwaitingNativeSessionRef = useRef<Set<string>>(new Set());
+  const claudeCandidateSessionIdByPendingThreadRef = useRef<Map<string, string>>(new Map());
   const geminiSessionIdByPendingThreadRef = useRef<Map<string, string>>(new Map());
   const sessionSpecLinkByThreadRef = useRef<Map<string, SessionSpecLinkContext>>(new Map());
+  const sendMessageToThreadRef = useRef<SendMessageToThreadFn | null>(null);
   const normalizeEngineSelection = useCallback(
     (
       engine: "claude" | "codex" | "gemini" | "opencode" | undefined,
@@ -399,6 +473,85 @@ export function useThreadMessaging({
     [runWithCreateSessionLoading, startThreadForWorkspace],
   );
 
+  const reconcileClaudePendingThreadFromCandidate = useCallback(
+    async (
+      workspace: WorkspaceInfo,
+      pendingThreadId: string,
+    ): Promise<string | null> => {
+      const candidateSessionId =
+        claudeCandidateSessionIdByPendingThreadRef.current.get(pendingThreadId) ?? null;
+      if (!candidateSessionId) {
+        return null;
+      }
+      const workspacePath = typeof workspace.path === "string" ? workspace.path : "";
+      if (!workspacePath.trim()) {
+        return null;
+      }
+      const finalizedThreadId = `claude:${candidateSessionId}`;
+      try {
+        const result = await loadClaudeSessionService(workspacePath, candidateSessionId);
+        const record =
+          result && typeof result === "object"
+            ? (result as Record<string, unknown>)
+            : {};
+        const messagesData = record.messages ?? result;
+        const parsedItems = parseClaudeHistoryMessages(messagesData, workspacePath);
+        if (!hasClaudeTranscriptRebindEvidence(parsedItems)) {
+          onDebug?.({
+            id: `${Date.now()}-client-claude-candidate-reconcile-empty`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/session candidate transcript lacks rebind evidence",
+            payload: {
+              workspaceId: workspace.id,
+              threadId: pendingThreadId,
+              sessionId: candidateSessionId,
+              itemCount: parsedItems.length,
+            },
+          });
+          return null;
+        }
+        dispatch({
+          type: "renameThreadId",
+          workspaceId: workspace.id,
+          oldThreadId: pendingThreadId,
+          newThreadId: finalizedThreadId,
+        });
+        claudePendingThreadAwaitingNativeSessionRef.current.delete(pendingThreadId);
+        claudeCandidateSessionIdByPendingThreadRef.current.delete(pendingThreadId);
+        onDebug?.({
+          id: `${Date.now()}-client-claude-candidate-reconcile`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/session reconciled from candidate transcript",
+          payload: {
+            workspaceId: workspace.id,
+            oldThreadId: pendingThreadId,
+            newThreadId: finalizedThreadId,
+            sessionId: candidateSessionId,
+            itemCount: parsedItems.length,
+          },
+        });
+        return finalizedThreadId;
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-client-claude-candidate-reconcile-error`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/session candidate transcript load failed",
+          payload: {
+            workspaceId: workspace.id,
+            threadId: pendingThreadId,
+            sessionId: candidateSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        return null;
+      }
+    },
+    [dispatch, onDebug],
+  );
+
   const sendMessageToThread = useCallback(
     async (
       workspace: WorkspaceInfo,
@@ -410,6 +563,17 @@ export function useThreadMessaging({
       const messageText = text.trim();
       if (!messageText && images.length === 0) {
         return;
+      }
+      if (threadId.startsWith("claude-pending-")) {
+        const reconciledThreadId = await reconcileClaudePendingThreadFromCandidate(
+          workspace,
+          threadId,
+        );
+        const retrySend = sendMessageToThreadRef.current;
+        if (reconciledThreadId && retrySend) {
+          await retrySend(workspace, reconciledThreadId, text, images, options);
+          return;
+        }
       }
       const threadKind = resolveThreadKind(workspace.id, threadId);
       const resolvedThreadEngine = resolveThreadEngine(workspace.id, threadId);
@@ -447,6 +611,7 @@ export function useThreadMessaging({
             .filter((entry) => entry.length > 0),
         ),
       );
+      const memoryReferenceEnabled = options?.memoryReferenceEnabled === true;
       const selectedNoteCardIds = Array.from(
         new Set(
           (options?.selectedNoteCardIds ?? [])
@@ -488,6 +653,50 @@ export function useThreadMessaging({
         });
       }
       finalText = injectionResult.finalText;
+      let memoryScoutInjectionResult: InjectionResult = {
+        finalText,
+        injectedCount: 0,
+        injectedChars: 0,
+        retrievalMs: 0,
+        previewText: null,
+        disabledReason: null,
+      };
+      let memoryScoutBrief: MemoryBrief | null = null;
+      const memoryScoutSummaryItemId = `memory-scout-context-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      if (memoryReferenceEnabled) {
+        dispatch({
+          type: "upsertItem",
+          workspaceId: workspace.id,
+          threadId,
+          item: {
+            id: memoryScoutSummaryItemId,
+            kind: "message",
+            role: "assistant",
+            text: `${MEMORY_CONTEXT_SUMMARY_PREFIX}\n${t("threads.memoryReferenceQuerying")}`,
+          },
+          hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+        const memoryBrief = await withMemoryScoutTimeout(
+          scoutProjectMemory({
+            workspaceId: workspace.id,
+            query: visibleUserText,
+            listFn: projectMemoryFacade.listSummary,
+          }),
+        );
+        memoryScoutBrief = memoryBrief;
+        memoryScoutInjectionResult = injectMemoryScoutBriefContext({
+          userText: finalText,
+          brief: memoryBrief,
+          startIndex: injectionResult.injectedCount + 1,
+        });
+        memoryScoutInjectionResult = {
+          ...memoryScoutInjectionResult,
+          previewText: buildLocalizedMemoryScoutPreviewText(memoryBrief, t),
+        };
+        finalText = memoryScoutInjectionResult.finalText;
+      }
       let finalImages = [...images];
       if (selectedNoteCardIds.length > 0) {
         const selectedNotes = (
@@ -591,6 +800,20 @@ export function useThreadMessaging({
           hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
         });
       }
+      if (memoryReferenceEnabled && memoryScoutInjectionResult.previewText) {
+        dispatch({
+          type: "upsertItem",
+          workspaceId: workspace.id,
+          threadId,
+          item: {
+            id: memoryScoutSummaryItemId,
+            kind: "message",
+            role: "assistant",
+            text: `${MEMORY_CONTEXT_SUMMARY_PREFIX}\n${memoryScoutInjectionResult.previewText}`,
+          },
+          hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+      }
       if (noteInjectionResult.injectedCount > 0 && noteInjectionResult.previewText) {
         dispatch({
           type: "upsertItem",
@@ -605,6 +828,27 @@ export function useThreadMessaging({
             text: `${NOTE_CARD_CONTEXT_SUMMARY_PREFIX}\n${noteInjectionResult.previewText}`,
           },
           hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+      }
+      if (memoryReferenceEnabled) {
+        onDebug?.({
+          id: `${Date.now()}-memory-scout-result`,
+          timestamp: Date.now(),
+          source: "client",
+          label:
+            memoryScoutInjectionResult.injectedCount > 0
+              ? "memory/scout-injected"
+              : "memory/scout-skipped",
+          payload: {
+            workspaceId: workspace.id,
+            threadId,
+            injectedCount: memoryScoutInjectionResult.injectedCount,
+            injectedChars: memoryScoutInjectionResult.injectedChars,
+            retrievalMs: memoryScoutInjectionResult.retrievalMs,
+            reason: memoryScoutInjectionResult.disabledReason,
+            retrievalMode: memoryScoutBrief?.retrievalMode ?? "lexical",
+            semanticDiagnostics: memoryScoutBrief?.semanticDiagnostics ?? null,
+          },
         });
       }
       if (injectionResult.injectedCount > 0) {
@@ -1342,6 +1586,13 @@ export function useThreadMessaging({
           }
 
           if (resolvedEngine === "claude" && threadId.startsWith("claude-pending-")) {
+            const candidateSessionId = extractClaudeCandidateSessionId(response);
+            if (candidateSessionId) {
+              claudeCandidateSessionIdByPendingThreadRef.current.set(
+                threadId,
+                candidateSessionId,
+              );
+            }
             claudePendingThreadAwaitingNativeSessionRef.current.add(threadId);
             onDebug?.({
               id: `${Date.now()}-client-claude-session-await-native`,
@@ -1351,6 +1602,7 @@ export function useThreadMessaging({
               payload: {
                 workspaceId: workspace.id,
                 threadId,
+                sessionId: candidateSessionId,
                 source: "engineSendMessageResponse",
               },
             });
@@ -1550,12 +1802,11 @@ export function useThreadMessaging({
           }
         }
 
-        void projectMemoryCaptureAutoService({
+        void projectMemoryFacade.captureTurnInput({
           workspaceId: workspace.id,
-          text: visibleUserText,
+          userInput: visibleUserText,
           threadId,
-          messageId: turnId,
-          source: "composer_send",
+          turnId,
           workspaceName: workspace.name ?? null,
           workspacePath: workspace.path ?? null,
           engine: resolvedEngine,
@@ -1668,6 +1919,7 @@ export function useThreadMessaging({
       pendingInterruptsRef,
       pushThreadErrorMessage,
       recordThreadActivity,
+      reconcileClaudePendingThreadFromCandidate,
       resolveComposerSelection,
       resolveThreadKind,
       resolveThreadEngine,
@@ -1683,6 +1935,7 @@ export function useThreadMessaging({
       threadStatusById,
     ],
   );
+  sendMessageToThreadRef.current = sendMessageToThread;
 
   const sendUserMessage = useCallback(
     async (text: string, images: string[] = [], options?: SendMessageOptions) => {

@@ -1,7 +1,9 @@
 # git-history-branch-compare-style-compatibility Specification
 
 ## Purpose
-TBD - created by archiving change split-git-history-branch-compare-styles. Update Purpose after archive.
+
+Defines the git-history-branch-compare-style-compatibility behavior contract, covering Git History Branch Compare Style Extraction Compatibility.
+
 ## Requirements
 ### Requirement: Git History Branch Compare Style Extraction Compatibility
 The system SHALL preserve the effective branch compare selector contract and user-visible styling when `git-history-branch-compare-*` styles are moved out of `git-history.part1.css` into a dedicated shard file.

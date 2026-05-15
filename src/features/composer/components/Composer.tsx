@@ -613,6 +613,7 @@ export const Composer = memo(function Composer({
   const [selectedCommonsNames, setSelectedCommonsNames] = useState<string[]>([]);
   const [selectedManualMemories, setSelectedManualMemories] = useState<ManualMemorySelection[]>([]);
   const [selectedNoteCards, setSelectedNoteCards] = useState<NoteCardSelection[]>([]);
+  const [memoryReferenceArmed, setMemoryReferenceArmed] = useState(false);
   const [carryOverManualMemoryIds, setCarryOverManualMemoryIds] = useState<string[]>([]);
   const [retainedManualMemoryIds, setRetainedManualMemoryIds] = useState<string[]>([]);
   const [carryOverNoteCardIds, setCarryOverNoteCardIds] = useState<string[]>([]);
@@ -775,6 +776,7 @@ export const Composer = memo(function Composer({
     setRetainedNoteCardIds(keepArrayWhenEmpty);
     setCarryOverContextChipKeys(keepArrayWhenEmpty);
     setRetainedContextChipKeys(keepArrayWhenEmpty);
+    setMemoryReferenceArmed(false);
   }, []);
   const resetContextLedgerSessionState = useCallback(() => {
     clearComposerContextSelections();
@@ -1332,8 +1334,9 @@ export const Composer = memo(function Composer({
       const selectedNoteCardIds = selectedNoteCards.map((entry) => entry.id);
       const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
       const sendOptions =
-        selectedMemoryIds.length > 0 || selectedNoteCardIds.length > 0
+        selectedMemoryIds.length > 0 || selectedNoteCardIds.length > 0 || memoryReferenceArmed
           ? {
+              ...(memoryReferenceArmed ? { memoryReferenceEnabled: true } : {}),
               ...(selectedMemoryIds.length > 0
                 ? { selectedMemoryIds, selectedMemoryInjectionMode }
                 : {}),
@@ -1384,6 +1387,7 @@ export const Composer = memo(function Composer({
         setCarryOverManualMemoryIds([]);
         setCarryOverNoteCardIds([]);
         setCarryOverContextChipKeys([]);
+        setMemoryReferenceArmed(false);
       });
       resetHistoryNavigation();
       setComposerText("");
@@ -1401,6 +1405,7 @@ export const Composer = memo(function Composer({
       onClearCodeAnnotations,
       selectedManualMemories,
       selectedNoteCards,
+      memoryReferenceArmed,
       onSend,
       inlineCompletion,
       recordHistory,
@@ -1916,8 +1921,8 @@ export const Composer = memo(function Composer({
                       </span>
                     </div>
                     <div className="composer-memory-chip-list">
-                      {selectedManualMemories.map((memory) => {
-                        const chipTitle = resolveManualMemoryChipTitle(memory);
+                      {selectedManualMemories.map((memory, memoryIndex) => {
+                        const chipTitle = `[M${memoryIndex + 1}] ${resolveManualMemoryChipTitle(memory)}`;
                         const chipDetail = resolveManualMemoryChipDetail(memory);
                         return (
                           <article
@@ -2268,6 +2273,8 @@ export const Composer = memo(function Composer({
               onRefreshAccountRateLimits={onRefreshAccountRateLimits}
               onCodexQuickCommand={handleCodexQuickCommand}
               onForkQuickStart={handleForkQuickStart}
+              memoryReferenceArmed={memoryReferenceArmed}
+              onToggleMemoryReference={() => setMemoryReferenceArmed((value) => !value)}
               hasMessages={items.length > 0}
               onRewind={handleRewind}
               showRewindEntry={canRewindSession}

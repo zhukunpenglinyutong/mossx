@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change spec-hub-openspec-hardening-2026-02-25. Update Purpose after archive.
+Defines the spec-hub-verify-state-persistence behavior contract, covering Verify Result SHALL Persist Beyond Session Timeline.
 
 ## Requirements
 

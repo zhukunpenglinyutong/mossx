@@ -1,7 +1,9 @@
 # composer-queued-followup-fusion Specification
 
 ## Purpose
-TBD - created by archiving change codex-queued-followup-fusion. Update Purpose after archive.
+
+Defines the composer-queued-followup-fusion behavior contract, covering Queued Follow-up Surface SHALL Match Composer Container Semantics.
+
 ## Requirements
 ### Requirement: Queued Follow-up Surface SHALL Match Composer Container Semantics
 

@@ -1,7 +1,9 @@
 # global-session-history-archive-center Specification
 
 ## Purpose
-TBD - created by archiving change global-session-history-archive-center. Update Purpose after archive.
+
+Defines the global-session-history-archive-center behavior contract, covering The Client SHALL Provide A Global Codex Session History Archive Center.
+
 ## Requirements
 ### Requirement: The Client SHALL Provide A Global Codex Session History Archive Center
 

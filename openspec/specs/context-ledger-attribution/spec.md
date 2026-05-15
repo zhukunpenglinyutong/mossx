@@ -1,7 +1,9 @@
 # context-ledger-attribution Specification
 
 ## Purpose
-TBD - created by archiving change add-context-ledger. Update Purpose after archive.
+
+Defines the context-ledger-attribution behavior contract, covering Effective Context Projection SHALL Use One Normalized Block Model For Phase 1 Observable Sources.
+
 ## Requirements
 ### Requirement: Effective Context Projection SHALL Use One Normalized Block Model For Phase 1 Observable Sources
 

@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { engineSendMessageSync } from '../../../../../services/tauri';
 import type { EngineType } from '../../../../../types';
+import { getNormalizedAssistantMessageText } from '../../../../../utils/threadItemsAssistantText';
 
 const PROMPT_ENHANCER_FAILURE_MESSAGE = 'Failed to enhance prompt';
 const PROMPT_ENHANCER_WORKSPACE_MESSAGE = 'Workspace is not ready for prompt enhancement';
+const PROMPT_ENHANCER_FALLBACK_FAILURE_MESSAGE =
+  'Prompt enhancement failed. Please keep the original prompt and try again.';
+const PROMPT_ENHANCER_EMPTY_FALLBACK_MESSAGE = 'Codex returned an empty prompt enhancement';
 const PROMPT_ENHANCER_TIMEOUT_MS = 60_000;
 const PROMPT_ENHANCER_TIMEOUT_MESSAGE =
   `Prompt enhancement timed out after ${PROMPT_ENHANCER_TIMEOUT_MS / 1000} seconds. Please try again.`;
@@ -60,6 +64,50 @@ function resolveErrorMessage(error: unknown): string {
   return PROMPT_ENHANCER_FAILURE_MESSAGE;
 }
 
+function isClaudeEnhancerRetryableError(error: unknown): boolean {
+  const message = resolveErrorMessage(error).toLowerCase();
+  return [
+    'claude exited with status',
+    'claude stream-json startup timed out',
+    'claude stream-json ended without a valid stream event',
+    'claude response timed out',
+    'rate limit',
+    'overloaded',
+    'network',
+    'authentication',
+    'auth',
+    'model',
+  ].some((needle) => message.includes(needle));
+}
+
+function resolvePromptEnhancerFailureMessage(primaryError: unknown, fallbackError?: unknown): string {
+  const primaryMessage = resolveErrorMessage(primaryError);
+  if (fallbackError === undefined) {
+    return primaryMessage;
+  }
+
+  const fallbackMessage = resolveErrorMessage(fallbackError);
+  if (
+    primaryMessage === PROMPT_ENHANCER_FAILURE_MESSAGE
+    && fallbackMessage === PROMPT_ENHANCER_FAILURE_MESSAGE
+  ) {
+    return PROMPT_ENHANCER_FALLBACK_FAILURE_MESSAGE;
+  }
+
+  return `Prompt enhancement failed. Claude: ${primaryMessage}. Fallback: ${fallbackMessage}`;
+}
+
+function normalizeEnhancedPromptResponse(text: unknown): string {
+  if (typeof text !== 'string') {
+    return '';
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return '';
+  }
+  return getNormalizedAssistantMessageText(trimmed).trim();
+}
+
 function buildIsolatedSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -107,7 +155,7 @@ async function requestEnhancedPrompt(options: {
     PROMPT_ENHANCER_TIMEOUT_MS,
     PROMPT_ENHANCER_TIMEOUT_MESSAGE,
   );
-  return response.text.trim();
+  return normalizeEnhancedPromptResponse(response.text);
 }
 
 interface UsePromptEnhancerOptions {
@@ -189,6 +237,8 @@ export function usePromptEnhancer({
     activeRequestIdRef.current = requestId;
     const engine = normalizeEnhancerEngine(currentProvider);
     const prompt = buildPromptEnhancerInstruction(content, engine);
+    const fallbackPrompt =
+      engine === 'claude' ? buildPromptEnhancerInstruction(content, 'codex') : null;
     const requestModel = selectedModel.trim().length > 0 ? selectedModel : null;
     const requestSessionId = buildIsolatedSessionId();
 
@@ -222,7 +272,39 @@ export function usePromptEnhancer({
         if (activeRequestIdRef.current !== requestId) {
           return;
         }
-        setEnhancedPrompt(resolveErrorMessage(error));
+        if (engine === 'claude' && isClaudeEnhancerRetryableError(error) && fallbackPrompt) {
+          try {
+            setEnhancingEngine('codex');
+            const fallbackRewrittenPrompt = await requestEnhancedPrompt({
+              workspaceId,
+              prompt: fallbackPrompt,
+              engine: 'codex',
+              model: null,
+              sessionId: buildIsolatedSessionId(),
+            });
+            if (activeRequestIdRef.current !== requestId) {
+              return;
+            }
+            if (!fallbackRewrittenPrompt) {
+              setEnhancedPrompt(
+                resolvePromptEnhancerFailureMessage(error, PROMPT_ENHANCER_EMPTY_FALLBACK_MESSAGE),
+              );
+              setCanUseEnhancedPrompt(false);
+              return;
+            }
+            setEnhancedPrompt(fallbackRewrittenPrompt);
+            setCanUseEnhancedPrompt(true);
+            return;
+          } catch (fallbackError: unknown) {
+            if (activeRequestIdRef.current !== requestId) {
+              return;
+            }
+            setEnhancedPrompt(resolvePromptEnhancerFailureMessage(error, fallbackError));
+            setCanUseEnhancedPrompt(false);
+            return;
+          }
+        }
+        setEnhancedPrompt(resolvePromptEnhancerFailureMessage(error));
         setCanUseEnhancedPrompt(false);
       } finally {
         if (activeRequestIdRef.current === requestId) {

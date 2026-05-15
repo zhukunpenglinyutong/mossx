@@ -46,6 +46,43 @@ describe("resolveUserMessagePresentation", () => {
     expect(result.memorySummary?.preview ?? "").toContain("[项目上下文]");
   });
 
+  it("strips consecutive retrieval packs and keeps only the visible user input", () => {
+    const result = resolveUserMessagePresentation({
+      text: [
+        '<project-memory-pack source="manual-selection" count="1" cleaned="false" cleanerStatus="source_records_only" truncated="false">',
+        "Cleaned Context:",
+        "- source records only",
+        "",
+        "Source Records:",
+        "[M1] memoryId=m-1 title=手动记忆 recordKind=manual_note sourceType=manual threadId=null turnId=null engine=null updatedAt=1",
+        "</project-memory-pack>",
+        "",
+        '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+        "Cleaned Context:",
+        "- [M2] 自动关联事实",
+        "",
+        "Source Records:",
+        "[M2] memoryId=m-2 title=自动记忆 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=2",
+        "</project-memory-pack>",
+        "",
+        "继续分析",
+      ].join("\n"),
+      selectedAgentName: null,
+      selectedAgentIcon: null,
+      enableCollaborationBadge: false,
+    });
+
+    expect(result.displayText).toBe("继续分析");
+    expect(result.memorySummary?.records?.map((record) => record.displayIndex)).toEqual([
+      "#1",
+      "#2",
+    ]);
+    expect(result.memorySummary?.records?.map((record) => record.index)).toEqual([
+      "[M1]",
+      "[M2]",
+    ]);
+  });
+
   it("strips codex mode fallback prefix when collaboration badge mode is enabled", () => {
     const result = resolveUserMessagePresentation({
       text:

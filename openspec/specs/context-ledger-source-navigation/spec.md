@@ -1,7 +1,9 @@
 # context-ledger-source-navigation Specification
 
 ## Purpose
-TBD - created by archiving change extend-context-ledger-source-navigation. Update Purpose after archive.
+
+Defines the context-ledger-source-navigation behavior contract, covering Context Ledger SHALL Support Source Navigation For Explicit User-Managed Blocks.
+
 ## Requirements
 ### Requirement: Context Ledger SHALL Support Source Navigation For Explicit User-Managed Blocks
 

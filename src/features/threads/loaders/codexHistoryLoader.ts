@@ -51,6 +51,7 @@ function isInvalidCodexThreadIdError(value: unknown) {
 
 type MessageItem = Extract<ConversationItem, { kind: "message" }>;
 type AssistantMessageItem = MessageItem & { role: "assistant" };
+type UserMessageItem = MessageItem & { role: "user" };
 
 function appendUniqueItems(
   target: ConversationItem[],
@@ -83,6 +84,100 @@ type RemoteTurnTarget = {
   userAnchor: string;
   assistantIndex: number;
 };
+
+const PROJECT_MEMORY_CONTEXT_PREFIX_REGEX =
+  /^<project-memory(?:-pack)?\b[\s\S]*?<\/project-memory(?:-pack)?>\s*/i;
+
+function asString(value: unknown) {
+  return typeof value === "string" ? value : value ? String(value) : "";
+}
+
+function hasProjectMemoryContextPrefix(text: string) {
+  return PROJECT_MEMORY_CONTEXT_PREFIX_REGEX.test(text.trimStart());
+}
+
+function extractUserItemText(item: Record<string, unknown>) {
+  const content = Array.isArray(item.content) ? item.content : [];
+  const contentText = content
+    .map((entry) => {
+      const record = entry && typeof entry === "object"
+        ? (entry as Record<string, unknown>)
+        : {};
+      return asString(record.text ?? record.value ?? record.content ?? "").trim();
+    })
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return (
+    contentText ||
+    asString(
+      item.text ??
+        item.inputText ??
+        item.input_text ??
+        item.prompt ??
+        item.message ??
+        "",
+    ).trim()
+  );
+}
+
+function collectRemoteUserMemoryContextPrefixes(thread: Record<string, unknown>) {
+  const turns = Array.isArray(thread.turns) ? thread.turns : [];
+  const prefixes: string[] = [];
+  turns.forEach((turn) => {
+    const turnRecord = turn && typeof turn === "object"
+      ? (turn as Record<string, unknown>)
+      : {};
+    const turnItems = Array.isArray(turnRecord.items) ? turnRecord.items : [];
+    turnItems.forEach((item) => {
+      const itemRecord = item && typeof item === "object"
+        ? (item as Record<string, unknown>)
+        : {};
+      if (asString(itemRecord.type).trim() !== "userMessage") {
+        return;
+      }
+      const rawText = extractUserItemText(itemRecord);
+      if (hasProjectMemoryContextPrefix(rawText)) {
+        prefixes.push(rawText.trimStart());
+      } else {
+        prefixes.push("");
+      }
+    });
+  });
+  return prefixes;
+}
+
+function hydrateRemoteUserMemoryContextPrefixes(
+  historyItems: ConversationItem[],
+  memoryContextPrefixes: string[],
+) {
+  if (memoryContextPrefixes.length === 0) {
+    return historyItems;
+  }
+  let userIndex = 0;
+  let changed = false;
+  const hydrated = historyItems.map((item) => {
+    if (item.kind !== "message" || item.role !== "user") {
+      return item;
+    }
+    const rawText = memoryContextPrefixes[userIndex] ?? "";
+    userIndex += 1;
+    if (
+      !rawText ||
+      hasProjectMemoryContextPrefix(item.text) ||
+      !hasProjectMemoryContextPrefix(rawText)
+    ) {
+      return item;
+    }
+    changed = true;
+    return {
+      ...item,
+      role: "user",
+      text: rawText,
+    } satisfies UserMessageItem;
+  });
+  return changed ? hydrated : historyItems;
+}
 
 function normalizeTurnAnchorText(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -662,7 +757,12 @@ export function createCodexHistoryLoader({
       const result = asRecord(response?.result ?? response);
       const thread = asRecord(result.thread ?? response?.thread);
       const hasThread = Object.keys(thread).length > 0;
-      const historyItems = hasThread ? buildItemsFromThread(thread) : [];
+      const historyItems = hasThread
+        ? hydrateRemoteUserMemoryContextPrefixes(
+            buildItemsFromThread(thread),
+            collectRemoteUserMemoryContextPrefixes(thread),
+          )
+        : [];
       let items = historyItems;
 
       if (loadCodexSession) {

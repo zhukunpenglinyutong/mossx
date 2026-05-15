@@ -1,7 +1,9 @@
 # subagent-session-tree-navigation Specification
 
 ## Purpose
-TBD - created by archiving change add-subagent-session-tree-navigation. Update Purpose after archive.
+
+Defines the subagent-session-tree-navigation behavior contract, covering Subagent Sessions MUST Be Represented As First-Class Child Sessions.
+
 ## Requirements
 ### Requirement: Subagent Sessions MUST Be Represented As First-Class Child Sessions
 

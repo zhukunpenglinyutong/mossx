@@ -1,7 +1,9 @@
 # codex-external-config-runtime-reload Specification
 
 ## Purpose
-TBD - created by archiving change fix-codex-source-switch-runtime-apply-2026-03-31. Update Purpose after archive.
+
+Defines the codex-external-config-runtime-reload behavior contract, covering Codex External Config Reload MUST Be Triggerable Without App Restart.
+
 ## Requirements
 ### Requirement: Codex External Config Reload MUST Be Triggerable Without App Restart
 The system MUST provide a client-visible action to reload Codex runtime configuration from external config files without restarting the application process.

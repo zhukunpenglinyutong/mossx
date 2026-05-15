@@ -2,7 +2,6 @@
 
 ## Purpose
 Define the explicit affordance that lets GUI-created Claude Code sessions resume in Claude TUI using the native Claude session id, without mutating Claude transcript metadata or relying on the no-argument TUI resume picker.
-
 ## Requirements
 ### Requirement: Claude GUI Sessions MUST Expose An Explicit TUI Resume Path
 
@@ -28,6 +27,13 @@ The system MUST provide a reliable user-facing way to continue a GUI-created Cla
 - **WHEN** the thread id is a pending Claude UI identity such as `claude-pending-*`
 - **THEN** the system MUST NOT expose an enabled Claude TUI resume action
 - **AND** it MUST NOT copy a command that treats the pending id as a native Claude session id
+
+#### Scenario: provisional Claude session id does not expose resume command
+
+- **WHEN** a Claude turn has only an `engine_send_message` response-derived session id
+- **AND** the session has not yet finalized into `claude:<nativeSessionId>`
+- **THEN** the system MUST NOT expose a TUI resume command for that response-derived id
+- **AND** it MUST wait for finalized native session identity before enabling resume affordances
 
 #### Scenario: virtual Claude subagent thread does not expose top-level resume command
 

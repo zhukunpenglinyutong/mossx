@@ -1,7 +1,9 @@
 # third-party-message-ingestion Specification
 
 ## Purpose
-TBD - created by archiving change add-third-party-message-ingestion-feishu-2026-03-08. Update Purpose after archive.
+
+Defines the third-party-message-ingestion behavior contract, covering Client SHALL Provide Third-Party Message Integration Module.
+
 ## Requirements
 ### Requirement: Client SHALL Provide Third-Party Message Integration Module
 

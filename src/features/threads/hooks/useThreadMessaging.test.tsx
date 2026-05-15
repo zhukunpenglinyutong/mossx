@@ -13,6 +13,7 @@ import {
   getWorkspaceFiles,
   interruptTurn,
   listGeminiSessions,
+  loadClaudeSession,
   listMcpServerStatus,
   sendUserMessage,
 } from "../../../services/tauri";
@@ -32,6 +33,7 @@ vi.mock("../../../services/tauri", () => ({
   compactThreadContext: vi.fn(),
   sendUserMessage: vi.fn(),
   projectMemoryCaptureAuto: vi.fn(async () => null),
+  projectMemoryCaptureTurnInput: vi.fn(async () => null),
   startReview: vi.fn(),
   interruptTurn: vi.fn(),
   listMcpServerStatus: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock("../../../services/tauri", () => ({
   listGitBranches: vi.fn(),
   getGitLog: vi.fn(),
   listGeminiSessions: vi.fn(),
+  loadClaudeSession: vi.fn(),
   engineSendMessage: vi.fn(),
   engineInterruptTurn: vi.fn(),
   engineInterrupt: vi.fn(),
@@ -89,6 +92,7 @@ describe("useThreadMessaging", () => {
       gitignored_directories: [],
     });
     vi.mocked(listGeminiSessions).mockResolvedValue([]);
+    vi.mocked(loadClaudeSession).mockResolvedValue({ messages: [] });
     vi.mocked(listMcpServerStatus).mockResolvedValue({ result: { data: [] } });
     vi.mocked(engineInterrupt).mockResolvedValue();
     vi.mocked(engineInterruptTurn).mockResolvedValue();
@@ -801,6 +805,129 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
     expect(pushThreadErrorMessage).toHaveBeenCalledWith(
       "claude-pending-abc",
+      "threads.claudePendingNativeSessionWait",
+    );
+  });
+
+  it("rebinds claude pending follow-up after candidate transcript validates", async () => {
+    const workspaceWithTrailingSpace = { ...workspace, path: "/tmp/mossx " };
+    vi.mocked(engineSendMessage)
+      .mockResolvedValueOnce({
+        sessionId: "session-xyz",
+        result: { turn: { id: "turn-1" }, sessionId: "session-xyz" },
+      })
+      .mockResolvedValueOnce({
+        sessionId: "session-xyz",
+        result: { turn: { id: "turn-2" }, sessionId: "session-xyz" },
+      });
+    vi.mocked(loadClaudeSession).mockResolvedValueOnce({
+      messages: [
+        {
+          kind: "message",
+          id: "user-1",
+          role: "user",
+          text: "hello claude",
+        },
+        {
+          kind: "message",
+          id: "assistant-1",
+          role: "assistant",
+          text: "done",
+        },
+      ],
+    });
+    const dispatch = vi.fn();
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
+      activeThreadId: "claude-pending-abc",
+      ensuredThreadId: "claude-pending-abc",
+      dispatch,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspaceWithTrailingSpace,
+        "claude-pending-abc",
+        "hello claude",
+      );
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspaceWithTrailingSpace,
+        "claude-pending-abc",
+        "follow up",
+      );
+    });
+
+    expect(loadClaudeSession).toHaveBeenCalledWith("/tmp/mossx ", "session-xyz");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "renameThreadId",
+      workspaceId: "ws-1",
+      oldThreadId: "claude-pending-abc",
+      newThreadId: "claude:session-xyz",
+    });
+    expect(engineSendMessage).toHaveBeenNthCalledWith(
+      2,
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        continueSession: true,
+        sessionId: "session-xyz",
+        threadId: "claude:session-xyz",
+      }),
+    );
+    expect(pushThreadErrorMessage).not.toHaveBeenCalledWith(
+      "claude-pending-abc",
+      "threads.claudePendingNativeSessionWait",
+    );
+  });
+
+  it("does not rebind claude pending follow-up from user-only candidate transcript", async () => {
+    vi.mocked(engineSendMessage).mockResolvedValueOnce({
+      sessionId: "session-user-only",
+      result: { turn: { id: "turn-1" }, sessionId: "session-user-only" },
+    });
+    vi.mocked(loadClaudeSession).mockResolvedValueOnce({
+      messages: [
+        {
+          kind: "message",
+          id: "user-1",
+          role: "user",
+          text: "hello claude",
+        },
+      ],
+    });
+    const dispatch = vi.fn();
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
+      activeThreadId: "claude-pending-user-only",
+      ensuredThreadId: "claude-pending-user-only",
+      dispatch,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude-pending-user-only",
+        "hello claude",
+      );
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude-pending-user-only",
+        "follow up too early",
+      );
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "renameThreadId",
+      }),
+    );
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-user-only",
       "threads.claudePendingNativeSessionWait",
     );
   });

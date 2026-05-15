@@ -1,7 +1,9 @@
 # opencode-windows-cli-resolution Specification
 
 ## Purpose
-TBD - created by archiving change fix-windows-opencode-foreground-launch. Update Purpose after archive.
+
+Defines the opencode-windows-cli-resolution behavior contract, covering Windows OpenCode Resolution MUST Avoid Foreground-Activating Candidates.
+
 ## Requirements
 ### Requirement: Windows OpenCode Resolution MUST Avoid Foreground-Activating Candidates
 

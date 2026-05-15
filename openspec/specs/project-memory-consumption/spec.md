@@ -6,31 +6,58 @@
 ## Requirements
 ### Requirement: 前端消息注入
 
-系统 MUST 在用户发送消息前采用"手动选择优先"注入策略，不再执行自动相关性检索注入。
+系统 MUST 在用户发送消息前采用"手动选择优先 + 显式 Memory Reference"注入策略，不再执行静默自动相关性检索注入。
 
-#### Scenario: 未手动选择时不注入
+#### Scenario: 未手动选择且未开启 Memory Reference 时不注入
 
 - **WHEN** 用户发送消息且本次未手动选择任何记忆
+- **AND** Composer Memory Reference toggle 未开启
 - **THEN** 系统 SHALL 直接发送用户原始文本
 - **AND** SHALL NOT 自动调用相关性注入流程
 
 #### Scenario: 手动选择后注入
 
 - **WHEN** 用户在本次发送前手动选择了项目记忆
-- **THEN** 系统 SHALL 仅注入这些已选记忆
+- **THEN** 系统 SHALL 注入这些已选记忆
 - **AND** 注入块 SHALL 追加在用户原始文本前
+- **AND** 注入来源 SHALL 标记为 `manual-selection`
 
-#### Scenario: 注入格式规范
+#### Scenario: 开启 Memory Reference 后注入 Brief
 
-- **WHEN** 系统构建手动注入文本块
-- **THEN** 仍 SHALL 使用 `<project-memory ...>` 包裹格式
-- **AND** `source` SHALL 标记为手动选择来源（如 `manual-selection`）
+- **WHEN** 用户开启 Composer Memory Reference toggle 并发送消息
+- **THEN** 系统 SHALL 在发送前执行 Memory Scout 查询
+- **AND** 若 Scout 返回可用 Memory Brief，系统 SHALL 注入 Brief
+- **AND** 注入来源 SHALL 标记为 `memory-scout`
+
+#### Scenario: 手动选择与 Memory Reference 并存
+
+- **WHEN** 用户已手动选择记忆
+- **AND** 同时开启 Memory Reference toggle
+- **THEN** 系统 SHALL 同时保留 `manual-selection` 和 `memory-scout` 两类来源
+- **AND** UI SHALL 区分显示两类注入来源
+
+#### Scenario: 注入记忆作为独立关联资源展示
+
+- **GIVEN** 用户消息包含 `manual-selection` 或 `memory-scout` 的 Project Memory 注入块
+- **WHEN** 系统在消息时间线中渲染该轮对话
+- **THEN** Project Memory 引用 SHALL 作为独立关联资源卡片展示
+- **AND** SHALL NOT 与用户可见输入气泡混排
+- **AND** Claude、Codex 和 Gemini 路径 SHALL 使用一致的展示语义
+
+#### Scenario: Codex 历史回放保留 Project Memory 关联资源
+
+- **GIVEN** Codex 历史记录中的 user payload 原始文本包含 `<project-memory source="memory-scout">` 或 `<project-memory source="manual-selection">`
+- **WHEN** 系统从 remote resume 或 local JSONL history 回放该线程
+- **THEN** history loader SHALL 保留 Project Memory 注入块供消息渲染层解析
+- **AND** 用户可见气泡 SHALL 只显示真实用户输入
+- **AND** Project Memory 引用 SHALL 独立显示为关联资源卡片
 
 #### Scenario: 当次发送后清空
 
 - **WHEN** 注入发送完成（成功或失败后收敛）
 - **THEN** 系统 SHALL 清空本次手动选择集合
-- **AND** 下次发送前需重新选择
+- **AND** Memory Reference toggle SHALL 回到未激活状态或空闲状态
+- **AND** 下次发送前需重新选择或重新开启
 
 ### Requirement: 相关性检索
 
@@ -66,31 +93,30 @@
 - **AND** 不注入任何记忆到消息
 
 ### Requirement: Token 预算控制
+系统 MUST 控制 Retrieval Pack 的总上下文预算，优先保留详细 source record 的身份、来源和任务相关字段，并显式标记发生裁剪的位置。
 
-系统 MUST 严格控制注入内容的字符数,避免占用过多上下文窗口。
+#### Scenario: 字段级裁剪
 
-#### Scenario: 单条记忆裁剪
-
-- **GIVEN** 单条记忆 summary 长度为 300 字符
-- **AND** maxItemChars 限制为 200
-- **WHEN** 裁剪单条记忆
-- **THEN** 应截取前 200 字符
-- **AND** 不添加省略号(保持语义完整性)
+- **GIVEN** 单条记忆的 assistantResponse 超过单字段预算
+- **WHEN** 系统构建 Retrieval Pack
+- **THEN** 系统 SHALL 保留 memoryId、索引和来源 metadata
+- **AND** SHALL 裁剪超预算字段
+- **AND** SHALL 在该字段或该记录上标记 truncated
 
 #### Scenario: 总量预算裁剪
 
 - **GIVEN** 候选记忆共 10 条
-- **AND** maxTotalChars 限制为 1000
-- **WHEN** 累计注入字符数
-- **THEN** 应在达到 1000 字符时立即停止
-- **AND** 不应继续添加更多记忆
+- **AND** Retrieval Pack 达到总预算限制
+- **WHEN** 系统继续处理剩余记忆
+- **THEN** 系统 SHALL 停止追加低优先级记录
+- **AND** SHALL 在 pack 头部标记 `truncated="true"` 或等价状态
 
-#### Scenario: 裁剪标记
+#### Scenario: 不以 summary 替代详细记录
 
-- **GIVEN** 注入内容发生裁剪
-- **WHEN** 构建注入块头部
-- **THEN** 应在 XML 标签中标记 `truncated="true"`
-- **AND** 示例: `<project-memory count="3" truncated="true">`
+- **GIVEN** 某条记忆被选中注入
+- **WHEN** 该记忆在预算内可容纳详细字段
+- **THEN** 系统 SHALL 注入详细字段
+- **AND** SHALL NOT 仅用 summary 替代完整 source record
 
 ### Requirement: 排序策略
 
@@ -119,51 +145,65 @@
 
 ### Requirement: 开关控制
 
-系统 MUST 将"上下文注入开关"收敛为固定关闭态，避免用户触发旧自动注入行为。
+系统 MUST 将历史"上下文注入开关"收敛为固定关闭态，并提供 Composer 级 one-shot Memory Reference toggle 作为唯一显式记忆参考入口。
 
-#### Scenario: 默认关闭
+#### Scenario: 历史开关默认关闭
 
 - **WHEN** 系统初始化对话发送链路
-- **THEN** 上下文自动注入状态 SHALL 视为 false
+- **THEN** 历史上下文自动注入状态 SHALL 视为 false
 
-#### Scenario: 本地存储值不再驱动自动注入
+#### Scenario: 本地存储值不再驱动静默自动注入
 
 - **WHEN** localStorage 中存在 `projectMemory.contextInjectionEnabled=true`
-- **THEN** 系统 SHALL NOT 因该值恢复自动注入
-- **AND** 自动注入能力保持关闭
+- **THEN** 系统 SHALL NOT 因该值恢复静默自动注入
+- **AND** 静默自动注入能力保持关闭
 
-#### Scenario: 开关异常降级
+#### Scenario: Composer Memory Reference 默认关闭
 
-- **GIVEN** localStorage 读取失败
-- **WHEN** 系统尝试获取开关状态
-- **THEN** 应回退默认值 true
-- **AND** 不应阻塞消息发送
+- **WHEN** 用户打开 Composer
+- **THEN** Memory Reference toggle SHALL 默认处于关闭状态
+- **AND** 系统 SHALL NOT 查询 Project Memory
+
+#### Scenario: 用户显式开启本次记忆参考
+
+- **WHEN** 用户点击 Composer 底部 Memory Reference icon
+- **THEN** toggle SHALL 进入 armed 状态
+- **AND** 本次发送 SHALL 触发 Memory Scout
+- **AND** 该状态 SHALL NOT 自动变成全局永久设置
 
 ### Requirement: 异常处理和降级
 
-系统 MUST 确保注入失败不影响消息正常发送,提供完善的降级机制。
+系统 MUST 确保记忆注入或 Memory Scout 失败不影响消息正常发送，并提供完善的降级机制。
 
-#### Scenario: 记忆查询失败降级
+#### Scenario: Memory Scout 查询失败降级
 
-- **GIVEN** `project_memory_list` 调用失败(网络错误)
+- **GIVEN** Memory Scout 查询 Project Memory 失败
 - **WHEN** 系统捕获异常
-- **THEN** 应记录 `console.warn("[project-memory] query failed")`
-- **AND** 降级为"无注入发送"
+- **THEN** 应记录不包含记忆正文的诊断日志
+- **AND** 降级为"无 scout brief 发送"
 - **AND** 消息仍能正常发送
+
+#### Scenario: Memory Scout 超时降级
+
+- **GIVEN** Memory Scout 在超时限制内未返回
+- **WHEN** 用户发送流程继续
+- **THEN** 系统 SHALL 跳过 scout brief 注入
+- **AND** SHALL 在 UI 中显示本次记忆参考超时或失败状态
+- **AND** SHALL NOT 阻塞主会话发送
 
 #### Scenario: 查询结果为空不注入
 
-- **GIVEN** `getContextMemories` 返回空数组
+- **GIVEN** Memory Scout 返回空结果
 - **WHEN** 系统检测到无候选记忆
-- **THEN** 应跳过注入流程
-- **AND** 发送用户原始文本
+- **THEN** 应跳过 scout brief 注入
+- **AND** 发送用户原始文本或仅发送手动选择注入后的文本
 
-#### Scenario: 双引擎兼容
+#### Scenario: 多引擎兼容
 
-- **GIVEN** Claude 和 Codex 两条引擎路径
-- **WHEN** 执行注入逻辑
-- **THEN** 两条路径应均支持注入
-- **AND** 注入格式和行为保持一致
+- **GIVEN** Claude Code、Codex 和 Gemini 三条发送路径
+- **WHEN** 执行手动记忆注入或 Memory Reference 流程
+- **THEN** 各路径 SHALL 使用一致的注入块格式
+- **AND** Project Memory 不得暴露引擎专用注入 API
 
 ### Requirement: 可观测性
 
@@ -243,28 +283,34 @@
 
 ### Requirement: 用户可见性(Phase 2.2)
 
-系统 MUST 在 UI 中提供注入可见性控制,让用户了解注入了哪些记忆。
+系统 MUST 在 Composer 中提供 Memory Reference 可见性控制，让用户了解本次发送是否参考了项目记忆以及参考了哪些来源。
 
-#### Scenario: 折叠显示注入提示
+#### Scenario: 显示 Memory Reference toggle
 
-- **GIVEN** 成功注入 3 条记忆
-- **WHEN** 消息发送前
-- **THEN** 应在输入框上方显示提示 "已注入 3 条项目记忆"
-- **AND** 默认折叠不展开
+- **WHEN** Composer 底部工具区渲染
+- **THEN** 系统 SHALL 显示 Memory Reference icon button
+- **AND** button SHALL 有可访问名称
+- **AND** 当前开启/关闭状态 SHALL 可见
 
-#### Scenario: 展开查看注入明细
+#### Scenario: 查询中状态
 
-- **GIVEN** 用户点击注入提示
-- **WHEN** 展开明细面板
-- **THEN** 应列出 3 条记忆的 title 和 summary
-- **AND** 支持点击跳转到记忆详情
+- **WHEN** 用户开启 Memory Reference 并发送消息
+- **THEN** 系统 SHALL 显示记忆查询中状态
+- **AND** SHALL 防止用户误以为查询已经完成
 
-#### Scenario: 调试模式完整输出
+#### Scenario: 显示引用数量
 
-- **GIVEN** 开发模式开启 debug 开关
-- **WHEN** 记录注入日志
-- **THEN** 应输出完整注入文本块
-- **AND** 包含记忆正文(受开关控制)
+- **GIVEN** Memory Scout 返回 3 条来源记忆
+- **WHEN** 消息发送前或发送中显示状态
+- **THEN** 系统 SHALL 显示已参考 3 条项目记忆
+- **AND** 用户 SHALL 能查看来源标题或跳转到 Project Memory 详情
+
+#### Scenario: 失败状态可见
+
+- **GIVEN** Memory Scout 失败或超时
+- **WHEN** 系统降级发送
+- **THEN** Composer 或消息上下文 SHALL 显示本次未成功参考项目记忆
+- **AND** 主消息 SHALL 继续发送
 
 ### Requirement: 验收标准(Phase 2.1 MVP)
 
@@ -379,4 +425,62 @@
 - **WHEN** 当前发送准备态不存在手动选择的项目记忆
 - **THEN** Context Ledger SHALL NOT 伪造 `manual_memory` block
 - **AND** Phase 1 ledger SHALL NOT 仅为了补齐账本而重启隐藏的 project-memory 自动检索注入
+
+### Requirement: Memory Reference 边界控制
+
+系统 SHALL 将 Memory Reference 限定为本次发送的 Project Memory 参考能力，不得扩展为静默自动注入或通用项目 agent。
+
+#### Scenario: 不跨 workspace 检索
+
+- **WHEN** 用户在当前 workspace 开启 Memory Reference
+- **THEN** 系统 SHALL 只查询当前 workspace 的 Project Memory
+- **AND** SHALL NOT 查询其他 workspace 的记忆
+
+#### Scenario: 不读取项目文件
+
+- **WHEN** Memory Reference 执行 Scout 流程
+- **THEN** 系统 SHALL NOT 读取项目源文件、README、OpenSpec 或 Git 状态
+- **AND** SHALL 只基于 Project Memory 数据生成 Brief
+
+#### Scenario: 不执行工具命令
+
+- **WHEN** Memory Reference 执行 Scout 流程
+- **THEN** 系统 SHALL NOT 执行 shell、Git、Tauri 文件写入或外部工具命令
+
+#### Scenario: 不成为永久设置
+
+- **WHEN** 用户完成一次开启 Memory Reference 的发送
+- **THEN** 系统 SHALL 清空本次 Memory Reference 激活状态
+- **AND** SHALL NOT 将开启状态保存为 workspace 或 global 自动注入设置
+
+### Requirement: Memory Reference fallback recall integrity
+
+When production semantic retrieval is unavailable, the system SHALL still perform reliable lexical fallback retrieval for Memory Reference and MUST NOT discard obvious recall-intent memories solely because the raw user query is not a contiguous substring.
+
+#### Scenario: Identity recall does not depend on exact substring
+
+- **GIVEN** current workspace Project Memory contains a record whose content includes `我是陈湘宁`
+- **WHEN** the user enables Memory Reference and sends `我是谁`
+- **THEN** the system SHALL consider that memory as a candidate
+- **AND** the injected retrieval pack SHALL include the memory if it is within the selected fallback budget
+
+#### Scenario: Broad fallback candidates precede local ranking
+
+- **WHEN** semantic retrieval has no production provider
+- **THEN** Memory Reference SHALL fetch a broad workspace candidate set without raw query filtering
+- **AND** the broad fallback scan SHALL be allowed to continue across bounded pages when the first page is full
+- **AND** SHALL apply local multi-field ranking before deciding that no related project memory exists
+
+#### Scenario: Fallback remains bounded
+
+- **WHEN** Memory Reference fetches broad fallback candidates
+- **THEN** the candidate request SHALL use an explicit bounded page size
+- **AND** the total fallback scan SHALL stop at an explicit maximum item count
+- **AND** the final injected records SHALL remain capped by the existing Memory Scout selection budget
+
+#### Scenario: Identity recall avoids assistant self-introduction false positives
+
+- **GIVEN** a memory only proves that the assistant said `我是 Codex`
+- **WHEN** the user sends `我是谁`
+- **THEN** the system SHALL NOT promote that memory as user identity evidence
 

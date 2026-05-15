@@ -1,7 +1,9 @@
 # kanban-task-chaining Specification
 
 ## Purpose
-TBD - created by archiving change add-kanban-scheduled-and-chained-tasks. Update Purpose after archive.
+
+Defines the kanban-task-chaining behavior contract, covering Kanban Task SHALL Support Linear Chaining For Todo Tasks.
+
 ## Requirements
 ### Requirement: Kanban Task SHALL Support Linear Chaining For Todo Tasks
 

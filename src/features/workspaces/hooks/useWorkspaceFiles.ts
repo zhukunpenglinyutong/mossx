@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, WorkspaceInfo } from "../../../types";
 import { getWorkspaceFiles } from "../../../services/tauri";
+import type {
+  WorkspaceDirectoryEntry,
+  WorkspaceFileScanState,
+} from "../../../services/tauri";
 
 const WORKSPACE_FILES_DEBUG_KEY = "ccgui.debug.workspace-files";
 const WORKSPACE_FILES_SLOW_REQUEST_MS = 800;
@@ -21,6 +25,19 @@ function normalizeErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function normalizeDirectoryEntries(entries: unknown): WorkspaceDirectoryEntry[] {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries.filter((entry): entry is WorkspaceDirectoryEntry => {
+    if (!entry || typeof entry !== "object") {
+      return false;
+    }
+    const candidate = entry as Partial<WorkspaceDirectoryEntry>;
+    return typeof candidate.path === "string" && typeof candidate.child_state === "string";
+  });
+}
+
 type UseWorkspaceFilesOptions = {
   activeWorkspace: WorkspaceInfo | null;
   onDebug?: (entry: DebugEntry) => void;
@@ -38,6 +55,9 @@ export function useWorkspaceFiles({
   const [directories, setDirectories] = useState<string[]>([]);
   const [gitignoredFiles, setGitignoredFiles] = useState<Set<string>>(new Set());
   const [gitignoredDirectories, setGitignoredDirectories] = useState<Set<string>>(new Set());
+  const [scanState, setScanState] = useState<WorkspaceFileScanState>("complete");
+  const [limitHit, setLimitHit] = useState(false);
+  const [directoryMetadata, setDirectoryMetadata] = useState<WorkspaceDirectoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(() =>
     Boolean(activeWorkspace?.id && initialLoadEnabled),
   );
@@ -113,6 +133,9 @@ export function useWorkspaceFiles({
       const ignoredDirectories = Array.isArray(response.gitignored_directories)
         ? response.gitignored_directories
         : [];
+      const nextScanState = response.scan_state === "partial" ? "partial" : "complete";
+      const nextLimitHit = Boolean(response.limit_hit);
+      const nextDirectoryMetadata = normalizeDirectoryEntries(response.directory_entries);
       if (
         import.meta.env.DEV &&
         (elapsedMs >= WORKSPACE_FILES_SLOW_REQUEST_MS ||
@@ -126,6 +149,9 @@ export function useWorkspaceFiles({
           directories: nextDirectories.length,
           gitignoredFiles: ignored.length,
           gitignoredDirectories: ignoredDirectories.length,
+          scanState: nextScanState,
+          limitHit: nextLimitHit,
+          directoryEntries: nextDirectoryMetadata.length,
         });
       }
       onDebug?.({
@@ -141,6 +167,9 @@ export function useWorkspaceFiles({
           directories: nextDirectories.length,
           gitignoredFiles: ignored.length,
           gitignoredDirectories: ignoredDirectories.length,
+          scanState: nextScanState,
+          limitHit: nextLimitHit,
+          directoryEntries: nextDirectoryMetadata.length,
         },
       });
       if (requestWorkspaceId === latestWorkspaceIdRef.current) {
@@ -148,6 +177,9 @@ export function useWorkspaceFiles({
         setDirectories(nextDirectories);
         setGitignoredFiles(new Set(ignored));
         setGitignoredDirectories(new Set(ignoredDirectories));
+        setScanState(nextScanState);
+        setLimitHit(nextLimitHit);
+        setDirectoryMetadata(nextDirectoryMetadata);
         setLoadError(null);
         hasLoadedWorkspaceId.current = requestWorkspaceId;
         consecutiveFailures.current = 0;
@@ -209,6 +241,9 @@ export function useWorkspaceFiles({
     setDirectories([]);
     setGitignoredFiles(new Set());
     setGitignoredDirectories(new Set());
+    setScanState("complete");
+    setLimitHit(false);
+    setDirectoryMetadata([]);
     setLoadError(null);
     hasLoadedWorkspaceId.current = null;
     inFlight.current = null;
@@ -281,6 +316,9 @@ export function useWorkspaceFiles({
     directories: directoryOptions,
     gitignoredFiles,
     gitignoredDirectories,
+    scanState,
+    limitHit,
+    directoryMetadata,
     isLoading,
     loadError,
     refreshFiles,

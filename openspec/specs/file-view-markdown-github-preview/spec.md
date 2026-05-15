@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change split-file-markdown-renderer-github-style. Update Purpose after archive.
+Defines the file-view-markdown-github-preview behavior contract, covering File View Markdown Preview SHALL Use A Dedicated Renderer.
+
 ## Requirements
 ### Requirement: File View Markdown Preview SHALL Use A Dedicated Renderer
 

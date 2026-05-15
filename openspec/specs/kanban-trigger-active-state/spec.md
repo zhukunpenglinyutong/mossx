@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change opencode-session-hard-delete. Update Purpose after archive.
+Defines the kanban-trigger-active-state behavior contract, covering 看板 Trigger 选中态必须提供深色视觉反馈.
 
 ## Requirements
 

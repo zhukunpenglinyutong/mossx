@@ -1,6 +1,12 @@
 import type { ConversationItem } from "../../../types";
 
-export type CodexRecoveryOutcomeKind = "rebound" | "fresh" | "failed" | "abandoned";
+export type CodexRecoveryOutcomeKind =
+  | "rebound"
+  | "fresh"
+  | "failed"
+  | "abandoned"
+  | "recoverable"
+  | "recovered";
 
 export type CodexLivenessStage =
   | "draft"
@@ -8,6 +14,8 @@ export type CodexLivenessStage =
   | "durable-safe"
   | "identity-stale"
   | "runtime-ready"
+  | "active"
+  | "suspected-silent"
   | "stalled"
   | "abandoned"
   | "fresh-continuation";

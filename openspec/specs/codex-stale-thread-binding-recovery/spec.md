@@ -1,7 +1,9 @@
 # codex-stale-thread-binding-recovery Specification
 
 ## Purpose
-TBD - created by archiving change fix-codex-stale-thread-binding-recovery. Update Purpose after archive.
+
+Defines the codex-stale-thread-binding-recovery behavior contract, covering Verified Codex Thread Replacement MUST Survive Restart.
+
 ## Requirements
 ### Requirement: Verified Codex Thread Replacement MUST Survive Restart
 

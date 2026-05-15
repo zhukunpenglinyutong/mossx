@@ -1,7 +1,9 @@
 # computer-use-official-parent-handoff Specification
 
 ## Purpose
-TBD - created by archiving change discover-computer-use-official-parent-handoff. Update Purpose after archive.
+
+Defines the computer-use-official-parent-handoff behavior contract, covering Official Parent Handoff Discovery MUST Be Read-Only.
+
 ## Requirements
 ### Requirement: Official Parent Handoff Discovery MUST Be Read-Only
 

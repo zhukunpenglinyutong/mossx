@@ -2,7 +2,8 @@
 
 ## Purpose
 
-TBD - created by archiving change git-history-panel. Update Purpose after archive.
+Defines the git-commit-history behavior contract, covering Paginated History Loading.
+
 ## Requirements
 ### Requirement: Paginated History Loading
 

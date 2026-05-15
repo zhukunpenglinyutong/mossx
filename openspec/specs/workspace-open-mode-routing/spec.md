@@ -1,7 +1,9 @@
 # workspace-open-mode-routing Specification
 
 ## Purpose
-TBD - created by archiving change workspace-open-mode-and-new-window. Update Purpose after archive.
+
+Defines the workspace-open-mode-routing behavior contract, covering 工作区导入必须支持打开模式分流.
+
 ## Requirements
 ### Requirement: 工作区导入必须支持打开模式分流
 

@@ -2,6 +2,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
+import type { WorkspaceDirectoryEntry } from "../../../services/tauri";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { pushErrorToast } from "../../../services/toasts";
 import {
@@ -31,6 +32,7 @@ type FileExplorerWorkspaceProps = {
   gitRoot?: string | null;
   files: string[];
   directories: string[];
+  directoryMetadata?: WorkspaceDirectoryEntry[];
   isLoading: boolean;
   loadError?: string | null;
   gitignoredFiles: Set<string>;
@@ -60,6 +62,7 @@ export function FileExplorerWorkspace({
   gitRoot = null,
   files,
   directories,
+  directoryMetadata,
   isLoading,
   loadError = null,
   gitignoredFiles,
@@ -190,6 +193,7 @@ export function FileExplorerWorkspace({
           gitRoot={gitRoot}
           files={files}
           directories={directories}
+          directoryMetadata={directoryMetadata}
           isLoading={isLoading}
           loadError={loadError}
           filePanelMode="files"

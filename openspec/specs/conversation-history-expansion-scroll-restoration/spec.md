@@ -1,7 +1,9 @@
 # conversation-history-expansion-scroll-restoration Specification
 
 ## Purpose
-TBD - created by archiving change fix-history-expansion-scroll-restoration. Update Purpose after archive.
+
+Defines the conversation-history-expansion-scroll-restoration behavior contract, covering Revealing Collapsed History SHALL Preserve The Reader's Current Viewport Context.
+
 ## Requirements
 ### Requirement: Revealing Collapsed History SHALL Preserve The Reader's Current Viewport Context
 When the conversation canvas reveals previously collapsed history above the current message window, the system SHALL preserve the user's current reading position instead of jumping to the top of the newly inserted history.

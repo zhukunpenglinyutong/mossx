@@ -1,7 +1,9 @@
 # workspace-session-management Specification
 
 ## Purpose
-TBD - created by archiving change project-session-management-center. Update Purpose after archive.
+
+Defines the workspace-session-management behavior contract, covering Session Management SHALL Be A Dedicated Settings Surface.
+
 ## Requirements
 ### Requirement: Session Management SHALL Be A Dedicated Settings Surface
 

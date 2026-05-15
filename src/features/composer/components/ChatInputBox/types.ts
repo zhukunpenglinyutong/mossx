@@ -568,6 +568,10 @@ export interface ChatInputBoxProps {
   onCodexReviewQuickStart?: () => void;
   /** Trigger fork quick action (codex/claude only) */
   onForkQuickStart?: () => void;
+  /** Whether one-shot project memory reference is armed */
+  memoryReferenceArmed?: boolean;
+  /** Toggle one-shot project memory reference */
+  onToggleMemoryReference?: () => void;
   /** Whether always thinking is enabled */
   alwaysThinkingEnabled?: boolean;
   /** Attachment list */
@@ -777,6 +781,10 @@ export interface ButtonAreaProps {
   onCodexReviewQuickStart?: () => void;
   /** Trigger fork quick action (codex/claude only) */
   onForkQuickStart?: () => void;
+  /** Whether one-shot project memory reference is armed */
+  memoryReferenceArmed?: boolean;
+  /** Toggle one-shot project memory reference */
+  onToggleMemoryReference?: () => void;
 
   // Event callbacks
   onSubmit?: () => void;

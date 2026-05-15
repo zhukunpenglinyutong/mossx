@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change improve-filetree-multitab-and-composer-visibility. Update Purpose after archive.
+Defines the composer-persistent-input-with-filetree behavior contract, covering 文件查看态下输入框保持可见.
 
 ## Requirements
 

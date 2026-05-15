@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -184,6 +185,13 @@ const CODEX_STRUCTURED_STREAMING_MIN_LIST_ITEMS = 6;
 const CODEX_STRUCTURED_STREAMING_MIN_CODE_LINES = 8;
 const CODEX_HUGE_STREAMING_MIN_LENGTH = 1_600;
 const CODEX_HUGE_STREAMING_MIN_LINES = 36;
+
+type MemoryPayloadPackView = {
+  source: string;
+  count: number;
+  cleanedContext: string;
+  rawPayload: string;
+};
 
 type StreamingMarkdownComplexity = {
   trimmedText: string;
@@ -898,7 +906,22 @@ export const MessageRow = memo(function MessageRow({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [deferredImageStates, setDeferredImageStates] = useState<Record<string, DeferredImageState>>({});
   const [memorySummaryExpanded, setMemorySummaryExpanded] = useState(false);
+  const [memoryPayloadDialogOpen, setMemoryPayloadDialogOpen] = useState(false);
   const [isAgentBadgeExpanded, setIsAgentBadgeExpanded] = useState(false);
+  useEffect(() => {
+    if (!memoryPayloadDialogOpen) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMemoryPayloadDialogOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [memoryPayloadDialogOpen]);
   const userMessagePresentation = useMemo(
     () => (
       item.role === "user"
@@ -934,6 +957,10 @@ export const MessageRow = memo(function MessageRow({
   );
   const resolvedMemorySummary = suppressMemorySummaryCard ? null : memorySummary;
   const resolvedNoteCardSummary = suppressNoteCardSummaryCard ? null : noteCardSummary;
+  const memorySummaryRecords = resolvedMemorySummary?.records ?? [];
+  const memorySummaryRawPayload = resolvedMemorySummary?.rawPayload?.trim() ?? "";
+  const memoryPayloadPacks: MemoryPayloadPackView[] =
+    resolvedMemorySummary?.memoryPacks ?? [];
   const agentTaskNotification = useMemo(
     () => parseAgentTaskNotification(item.text),
     [item.text],
@@ -1069,7 +1096,6 @@ export const MessageRow = memo(function MessageRow({
     !hasText
     && imageItems.length === 0
     && deferredImageItems.length === 0
-    && !resolvedMemorySummary
   ) || (
     item.role === "assistant"
     && (Boolean(resolvedMemorySummary) || Boolean(resolvedNoteCardSummary))
@@ -1256,37 +1282,6 @@ export const MessageRow = memo(function MessageRow({
           })}
         </div>
       ) : null}
-      {resolvedMemorySummary ? (
-        <div className="memory-context-summary-card">
-          <button
-            type="button"
-            className="memory-context-summary-toggle"
-            onClick={() => setMemorySummaryExpanded((current) => !current)}
-            aria-expanded={memorySummaryExpanded}
-          >
-            <span className="memory-context-summary-title">
-              {t("messages.memoryContextSummary")}
-            </span>
-            <span className="memory-context-summary-count">
-              {t("messages.memoryContextSummaryCount", {
-                count: resolvedMemorySummary.lines.length,
-              })}
-            </span>
-            {memorySummaryExpanded ? (
-              <ChevronUp size={14} aria-hidden />
-            ) : (
-              <ChevronDown size={14} aria-hidden />
-            )}
-          </button>
-          {memorySummaryExpanded && (
-            <div className="memory-context-summary-content">
-              {resolvedMemorySummary.lines.map((line, index) => (
-                <p key={`${item.id}-line-${index}`}>{line}</p>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
       {runtimeReconnectHint && showRuntimeReconnectCard ? (
         <RuntimeReconnectCard
           hint={runtimeReconnectHint}
@@ -1370,15 +1365,187 @@ export const MessageRow = memo(function MessageRow({
     agentTaskNotification
     || imageItems.length > 0
     || deferredImageItems.length > 0
-    || Boolean(resolvedMemorySummary)
     || (Boolean(runtimeReconnectHint) && showRuntimeReconnectCard)
     || hasText
     || !hideCopyButton;
-  if (!noteCardSummaryNode && !shouldRenderBubble) {
+  const memoryPayloadDialogNode =
+    memoryPayloadDialogOpen && memorySummaryRawPayload && typeof document !== "undefined"
+      ? createPortal(
+        <div
+          className="memory-context-payload-dialog-overlay"
+          role="presentation"
+          onClick={() => setMemoryPayloadDialogOpen(false)}
+        >
+          <div
+            className="memory-context-payload-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${item.id}-memory-payload-title`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="memory-context-payload-dialog-header">
+              <div>
+                <h3 id={`${item.id}-memory-payload-title`}>
+                  {t("messages.memoryContextSentDetailsTitle")}
+                </h3>
+                <p>{t("messages.memoryContextSentDetailsHint")}</p>
+              </div>
+              <button
+                type="button"
+                className="memory-context-payload-dialog-close"
+                aria-label={t("messages.memoryContextCloseDetails")}
+                onClick={() => setMemoryPayloadDialogOpen(false)}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+            <div className="memory-context-payload-dialog-body">
+              {memoryPayloadPacks.length > 0 ? (
+                <div className="memory-context-payload-pack-list">
+                  {memoryPayloadPacks.map((pack, packIndex) => (
+                    <section
+                      key={`${item.id}-memory-payload-pack-${packIndex}`}
+                      className="memory-context-payload-pack"
+                    >
+                      <div className="memory-context-payload-pack-header">
+                        <span className="memory-context-payload-pack-title">
+                          {t("messages.memoryContextPayloadPackTitle", {
+                            index: packIndex + 1,
+                          })}
+                        </span>
+                        <span className="memory-context-payload-pack-meta">
+                          {t("messages.memoryContextPayloadPackMeta", {
+                            source: pack.source || t("messages.memoryContextSourceUnknown"),
+                            count: Number(pack.count),
+                          })}
+                        </span>
+                      </div>
+                      <div className="memory-context-payload-section-label">
+                        {t("messages.memoryContextPayloadCleanedContext")}
+                      </div>
+                      <Markdown
+                        value={pack.cleanedContext}
+                        className="markdown memory-context-payload-markdown"
+                        workspaceId={workspaceId}
+                        codeBlockStyle="message"
+                        codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+                        onOpenFileLink={onOpenFileLink}
+                        onOpenFileLinkMenu={onOpenFileLinkMenu}
+                      />
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <Markdown
+                  value={memorySummaryRawPayload}
+                  className="markdown memory-context-payload-markdown"
+                  workspaceId={workspaceId}
+                  codeBlockStyle="message"
+                  codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+                  onOpenFileLink={onOpenFileLink}
+                  onOpenFileLinkMenu={onOpenFileLinkMenu}
+                />
+              )}
+              <details className="memory-context-payload-raw">
+                <summary>{t("messages.memoryContextPayloadRaw")}</summary>
+                <pre className="memory-context-payload-dialog-code">
+                  <code>{memorySummaryRawPayload}</code>
+                </pre>
+              </details>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+      : null;
+  const memorySummaryNode = resolvedMemorySummary ? (
+    <>
+      <div className="memory-context-summary-card">
+        <button
+          type="button"
+          className="memory-context-summary-toggle"
+          onClick={() => setMemorySummaryExpanded((current) => !current)}
+          aria-expanded={memorySummaryExpanded}
+        >
+          <span className="memory-context-summary-title">
+            {t("messages.memoryContextSummary")}
+          </span>
+          <span className="memory-context-summary-count">
+            {t("messages.memoryContextSummaryCount", {
+              count: resolvedMemorySummary.lines.length,
+            })}
+          </span>
+          {memorySummaryExpanded ? (
+            <ChevronUp size={14} aria-hidden />
+          ) : (
+            <ChevronDown size={14} aria-hidden />
+          )}
+        </button>
+        {memorySummaryExpanded && (
+          <div className="memory-context-summary-content">
+            {memorySummaryRecords.length > 0 ? (
+              <div className="memory-context-summary-record-list">
+                {memorySummaryRecords.map((record) => {
+                  const sourceLabel = record.source === "manual-selection"
+                    ? t("messages.memoryContextSourceManual")
+                    : record.source === "memory-scout"
+                      ? t("messages.memoryContextSourceMemoryReference")
+                      : (record.source || t("messages.memoryContextSourceUnknown"));
+                  return (
+                    <div
+                      key={`${item.id}-${record.displayIndex}-${record.index}-${record.memoryId}`}
+                      className="memory-context-summary-record"
+                    >
+                      <span className="memory-context-summary-record-index">
+                        {record.displayIndex}
+                      </span>
+                      <span className="memory-context-summary-record-copy">
+                        <span className="memory-context-summary-record-title">
+                          {record.title || record.memoryId}
+                        </span>
+                        <span className="memory-context-summary-record-meta">
+                          {t("messages.memoryContextRecordMeta", {
+                            source: sourceLabel,
+                            index: record.index,
+                          })}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <Markdown
+                value={resolvedMemorySummary.markdown ?? resolvedMemorySummary.lines.join("\n\n")}
+                className="markdown memory-context-summary-markdown"
+                workspaceId={workspaceId}
+                codeBlockStyle="message"
+                codeBlockCopyUseModifier={codeBlockCopyUseModifier}
+                onOpenFileLink={onOpenFileLink}
+                onOpenFileLinkMenu={onOpenFileLinkMenu}
+              />
+            )}
+            {memorySummaryRawPayload ? (
+              <button
+                type="button"
+                className="memory-context-summary-detail-button"
+                onClick={() => setMemoryPayloadDialogOpen(true)}
+              >
+                {t("messages.memoryContextViewSentDetails")}
+              </button>
+            ) : null}
+          </div>
+        )}
+      </div>
+      {memoryPayloadDialogNode}
+    </>
+  ) : null;
+  if (!memorySummaryNode && !noteCardSummaryNode && !codeAnnotationContextNode && !shouldRenderBubble) {
     return null;
   }
-  const stackedContent = noteCardSummaryNode || codeAnnotationContextNode ? (
+  const stackedContent = memorySummaryNode || noteCardSummaryNode || codeAnnotationContextNode ? (
     <div className={`message-context-stack${item.role === "user" ? " is-user" : ""}`}>
+      {memorySummaryNode}
       {codeAnnotationContextNode}
       {noteCardSummaryNode}
       {shouldRenderBubble ? bubbleNode : null}

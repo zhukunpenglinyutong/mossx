@@ -1,10 +1,27 @@
 import type { ConversationItem } from "../../../types";
 import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
+import { parseProjectMemoryRetrievalPackPrefix } from "../../project-memory/utils/projectMemoryRetrievalPack";
 import { isEquivalentUserObservation } from "../../threads/assembly/conversationNormalization";
 
 export type MemoryContextSummary = {
   preview: string;
   lines: string[];
+  markdown?: string;
+  rawPayload?: string;
+  memoryPacks?: Array<{
+    source: string;
+    count: number;
+    cleanedContext: string;
+    rawPayload: string;
+  }>;
+  source?: string;
+  records?: Array<{
+    displayIndex: string;
+    index: string;
+    memoryId: string;
+    source: string;
+    title: string;
+  }>;
 };
 
 const PROJECT_MEMORY_KIND_LINE_REGEX =
@@ -40,6 +57,7 @@ function buildMemorySummary(preview: string): MemoryContextSummary | null {
   return {
     preview: normalizedPreview,
     lines: lines.length > 0 ? lines : [normalizedPreview],
+    markdown: normalizedPreview,
   };
 }
 
@@ -59,6 +77,7 @@ export function parseMemoryContextSummary(text: string): MemoryContextSummary | 
   return {
     preview,
     lines: lines.length > 0 ? lines : [preview],
+    markdown: preview,
   };
 }
 
@@ -89,6 +108,65 @@ export function parseInjectedMemoryPrefixFromUser(
   const normalized = text.trimStart();
   if (!normalized) {
     return null;
+  }
+
+  const packSummaries: Array<NonNullable<
+    ReturnType<typeof parseProjectMemoryRetrievalPackPrefix>
+  >["packSummary"]> = [];
+  let remainingPackText = normalized;
+  let packMatch = parseProjectMemoryRetrievalPackPrefix(remainingPackText);
+  while (packMatch) {
+    packSummaries.push(packMatch.packSummary);
+    remainingPackText = packMatch.remainingText;
+    packMatch = parseProjectMemoryRetrievalPackPrefix(remainingPackText);
+  }
+  if (packSummaries.length > 0) {
+    const records = packSummaries.flatMap((summary) =>
+      summary.records.map((record) => ({
+        ...record,
+        source: summary.source,
+      })),
+    ).map((record, index) => ({
+      ...record,
+      displayIndex: `#${index + 1}`,
+    }));
+    const recordLines = records.map((record) => {
+      const sourcePrefix = packSummaries.length > 1 && record.source
+        ? `${record.source}: `
+        : "";
+      return `${sourcePrefix}${record.displayIndex} ${record.title || record.memoryId}`.trim();
+    });
+    const fallbackLines = packSummaries.flatMap((summary) =>
+      packSummaries.length > 1 && summary.source
+        ? summary.lines.map((line) => `${summary.source}: ${line}`)
+        : summary.lines,
+    );
+    const combinedLines = recordLines.length > 0 ? recordLines : fallbackLines;
+    const preview = combinedLines.length > 0
+      ? combinedLines.slice(0, 3).join("；")
+      : packSummaries.map((summary) => summary.preview).filter(Boolean).join("；");
+    const memorySummary = buildMemorySummary(preview);
+    if (!memorySummary) {
+      return null;
+    }
+    return {
+      memorySummary: {
+        ...memorySummary,
+        source: packSummaries.map((summary) => summary.source).filter(Boolean).join(","),
+        rawPayload: packSummaries.map((summary) => summary.rawPayload).join("\n\n"),
+        memoryPacks: packSummaries.map((summary) => ({
+          source: summary.source,
+          count: summary.count,
+          cleanedContext: summary.cleanedContext,
+          rawPayload: summary.rawPayload,
+        })),
+        records,
+        lines: combinedLines.length > 0
+          ? combinedLines
+          : memorySummary.lines,
+      },
+      remainingText: remainingPackText,
+    };
   }
 
   const xmlMatch = normalized.match(PROJECT_MEMORY_XML_PREFIX_REGEX);

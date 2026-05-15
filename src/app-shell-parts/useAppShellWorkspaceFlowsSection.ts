@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { writeClientStoreValue } from "../services/clientStorage";
 import { setNotificationActionHandler } from "../services/systemNotification";
 import { useRenameWorktreePrompt } from "../features/workspaces/hooks/useRenameWorktreePrompt";
@@ -10,7 +10,8 @@ import { useWorkspaceLaunchScripts } from "../features/app/hooks/useWorkspaceLau
 import { useWorktreeSetupScript } from "../features/app/hooks/useWorktreeSetupScript";
 import { buildClaudeResumeTerminalCommand } from "../features/app/utils/claudeResumeCommand";
 import { writeTerminalSession } from "../services/tauri";
-import type { WorkspaceInfo, WorkspaceSettings } from "../types";
+import type { AgentTaskScrollRequest } from "../features/messages/types";
+import type { AppSettings, DebugEntry, WorkspaceInfo, WorkspaceSettings } from "../types";
 
 const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 
@@ -25,7 +26,10 @@ type PendingClaudeTuiOpen = {
   command: string;
 };
 
-type UseAppShellWorkspaceFlowsSectionContext = {
+type WorkspaceShellSettings = Pick<AppSettings, "workspaceGroups"> &
+  Partial<Pick<AppSettings, "selectedOpenAppId">>;
+
+export type WorkspaceShellBoundary = {
   activeWorkspace: WorkspaceInfo | null;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
@@ -34,9 +38,9 @@ type UseAppShellWorkspaceFlowsSectionContext = {
     copyName: string,
     copiesFolder: string,
   ) => Promise<WorkspaceInfo | null>;
-  addDebugEntry: (entry: any) => void;
+  addDebugEntry: (entry: DebugEntry) => void;
   alertError: (message: string) => void;
-  appSettings: any;
+  appSettings: WorkspaceShellSettings;
   clearDraftForThread: (threadId: string) => void;
   closeTerminalPanel: () => void;
   collapseRightPanel: () => void;
@@ -45,8 +49,10 @@ type UseAppShellWorkspaceFlowsSectionContext = {
   handleToggleTerminal: () => void;
   isCompact: boolean;
   listThreadsForWorkspaceTracked: (workspace: WorkspaceInfo) => Promise<unknown> | unknown;
-  openTerminal: (...args: any[]) => unknown;
-  queueSaveSettings: (settings: any) => Promise<unknown> | unknown;
+  openTerminal: () => unknown;
+  queueSaveSettings: (
+    settings: WorkspaceShellSettings,
+  ) => Promise<WorkspaceShellSettings> | WorkspaceShellSettings;
   refreshThread: (workspaceId: string, threadId: string) => Promise<unknown> | unknown;
   removeImagesForThread: (threadId: string) => void;
   removeThread: (
@@ -64,9 +70,11 @@ type UseAppShellWorkspaceFlowsSectionContext = {
   setActiveEngine: (engine: string) => void;
   setActiveTab: (tab: string) => void;
   setActiveThreadId: (threadId: string, workspaceId: string) => void;
-  setAgentTaskScrollRequest: (request: any) => void;
+  setAgentTaskScrollRequest: Dispatch<SetStateAction<AgentTaskScrollRequest | null>>;
   setAppMode: (mode: string) => void;
-  setAppSettings: (updater: (current: any) => any) => void;
+  setAppSettings: (
+    updater: (current: WorkspaceShellSettings) => WorkspaceShellSettings,
+  ) => void;
   setCenterMode: (mode: string) => void;
   setHomeOpen: (open: boolean) => void;
   setSelectedKanbanTaskId: (taskId: string | null) => void;
@@ -81,7 +89,7 @@ type UseAppShellWorkspaceFlowsSectionContext = {
 };
 
 export function useAppShellWorkspaceFlowsSection(
-  ctx: UseAppShellWorkspaceFlowsSectionContext,
+  ctx: WorkspaceShellBoundary,
 ) {
   const {
     activeWorkspace,

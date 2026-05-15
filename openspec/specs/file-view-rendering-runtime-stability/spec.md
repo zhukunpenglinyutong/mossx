@@ -1,7 +1,9 @@
 # file-view-rendering-runtime-stability Specification
 
 ## Purpose
-TBD - created by archiving change improve-file-rendering-and-renderer-architecture. Update Purpose after archive.
+
+Defines the file-view-rendering-runtime-stability behavior contract, covering File view surfaces MUST share a stable render profile contract.
+
 ## Requirements
 ### Requirement: File view surfaces MUST share a stable render profile contract
 

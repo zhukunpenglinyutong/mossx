@@ -1,7 +1,9 @@
 # exhaustive-deps-sentinel-pattern-stability Specification
 
 ## Purpose
-TBD - created by archiving change stabilize-exhaustive-deps-sentinel-patterns. Update Purpose after archive.
+
+Defines the exhaustive-deps-sentinel-pattern-stability behavior contract, covering Sentinel-style recompute triggers must become explicit snapshots.
+
 ## Requirements
 ### Requirement: Sentinel-style recompute triggers must become explicit snapshots
 

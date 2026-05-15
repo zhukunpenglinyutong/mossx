@@ -1,7 +1,9 @@
 # composer-send-readiness-ux Specification
 
 ## Purpose
-TBD - created by archiving change improve-composer-send-readiness-ux. Update Purpose after archive.
+
+Defines the composer-send-readiness-ux behavior contract, covering Composer MUST Derive Send Readiness Through A View Model.
+
 ## Requirements
 ### Requirement: Composer MUST Derive Send Readiness Through A View Model
 

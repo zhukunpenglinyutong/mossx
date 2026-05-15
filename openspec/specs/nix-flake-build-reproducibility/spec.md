@@ -1,7 +1,9 @@
 # nix-flake-build-reproducibility Specification
 
 ## Purpose
-TBD - created by archiving change fix-linux-nix-flake-packaging. Update Purpose after archive.
+
+Defines the nix-flake-build-reproducibility behavior contract, covering Nix flake package build MUST produce the Tauri app from a clean-room source boundary.
+
 ## Requirements
 ### Requirement: Nix flake package build MUST produce the Tauri app from a clean-room source boundary
 

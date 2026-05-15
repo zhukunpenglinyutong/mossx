@@ -5,24 +5,12 @@
 Define a unified conversation lifecycle contract across Claude, Codex, and OpenCode, so delete/recovery/order behavior is restart-verifiable and engine-consistent.
 ## Requirements
 ### Requirement: Unified Cross-Engine Conversation Lifecycle Contract
-The system MUST define consistent lifecycle semantics (delete, recent ordering, restart visibility, key tool card recoverability) across Claude, Codex, and OpenCode.
+The system MUST define consistent lifecycle semantics (delete, recent ordering, restart visibility, key tool card recoverability, runtime mode input handling, and approval continuity) across Claude, Codex, and OpenCode.
 
 #### Scenario: lifecycle contract applies to all engines
 - **WHEN** the system executes lifecycle-related conversation operations
 - **THEN** semantics MUST remain consistent across all three engines
 - **AND** engine-specific differences MUST stay inside internal adapter layers
-
-#### Scenario: claude sidebar entry is reconciled before lifecycle consumers treat it as active
-- **WHEN** 当前引擎为 `Claude`
-- **AND** 用户从 recent conversations sidebar 重新激活一条历史会话
-- **AND** 该 entry 需要 canonical resolve、existence check 或等价 reconcile
-- **THEN** 生命周期消费者 MUST 在读取其 active identity 前先完成该 reconcile
-- **AND** 系统 MUST NOT 让 sidebar 显示的 selected entry 与实际打开的 `Claude` native session identity 相互矛盾
-
-#### Scenario: claude load failure cannot settle as a false loaded success
-- **WHEN** `Claude` 历史会话在 history load / reopen 过程中失败
-- **THEN** 生命周期状态 MUST 进入可解释的 failure 或 reconcile 分支
-- **AND** 系统 MUST NOT 继续把该 entry 当作已正常加载的 thread
 
 #### Scenario: key tool card lifecycle parity across engines
 - **WHEN** `commandExecution` or `fileChange` cards are produced in any engine session
@@ -34,13 +22,10 @@ The system MUST define consistent lifecycle semantics (delete, recent ordering, 
 - **THEN** previously visible `commandExecution` and `fileChange` cards MUST be replayed from persisted history
 - **AND** replayed card semantics MUST match pre-restart behavior
 
-#### Scenario: Claude concurrent realtime session update prefers turn-bound pending lineage
-- **WHEN** 当前引擎为 `Claude`
-- **AND** 同一 workspace 下存在多个并行 pending 会话
-- **AND** lifecycle consumer 收到带有 `sessionId` 的 realtime session update
-- **AND** 事件同时携带可验证的 `turnId`
-- **THEN** lifecycle consumer MUST 先按 `turnId` 匹配 pending lineage，再决定 canonical rebind
-- **AND** 系统 MUST NOT 仅因当前 active tab 指向另一条 Claude 会话而把 update 误绑到错误会话
+#### Scenario: runtime mode selection stays user-visible and effective
+- **WHEN** user selects an engine mode that is exposed as available in conversation UI
+- **THEN** that mode MUST remain a real runtime input for the target engine
+- **AND** product-layer initialization MUST NOT silently override it before send
 
 ### Requirement: Delete Semantics Must Be Restart-Verifiable
 
@@ -603,4 +588,200 @@ threads / messages / composer 主链路在第一阶段抽取期间 MUST 保持�
 - **WHEN** 新的 facade、adapter 或 extracted helper 被局部关闭或回滚
 - **THEN** conversation lifecycle contract MUST 继续成立
 - **AND** 回滚 MUST NOT 留下 pseudo-processing、identity 漂移或重复 settlement residue
+
+### Requirement: Realtime Turn Terminal Settlement MUST Clear Pseudo-Processing Safely
+Realtime conversation lifecycle consumers MUST settle terminal turn state deterministically when a turn reaches completed or error state, while protecting newer active turns from accidental cleanup.
+
+#### Scenario: completed turn clears processing after final assistant output
+- **WHEN** a realtime turn has produced final assistant output
+- **AND** the corresponding turn reaches completed terminal state
+- **THEN** the thread lifecycle state MUST clear processing mode
+- **AND** the active turn id for that completed turn MUST be cleared
+
+#### Scenario: alias thread completion settles all matching identities
+- **WHEN** a terminal completion event is associated with a finalized or canonical thread
+- **AND** a pending or alias thread still carries the same active turn id
+- **THEN** lifecycle settlement MUST clear processing state for both matching thread identities
+- **AND** external completion side effects MUST run only once for the terminal turn
+
+#### Scenario: fallback settlement does not clear newer turn
+- **WHEN** final assistant completion evidence exists for an older turn
+- **AND** the target thread has a newer active turn id
+- **THEN** fallback settlement MUST NOT clear processing for the newer turn
+- **AND** the rejected settlement MUST remain diagnosable
+
+### Requirement: Turn Completion Guard Rejections MUST Be Observable
+When terminal settlement refuses to clear processing, the system MUST emit enough structured evidence to distinguish a correct guard rejection from a stuck pseudo-processing bug.
+
+#### Scenario: turn mismatch records settlement rejection
+- **WHEN** a `turn/completed` event is received
+- **AND** its turn id does not match the current thread or alias active turn
+- **THEN** the client MUST record a settlement rejection with the requested thread id, alias thread id if any, terminal turn id, active turn ids, processing states, and rejection reason
+
+#### Scenario: successful settlement records cleared target identities
+- **WHEN** a terminal completion event successfully clears processing
+- **THEN** the client MUST record which thread identities were settled
+- **AND** the evidence MUST be correlatable with workspace, thread, engine, and turn
+
+### Requirement: Realtime Terminal Fence Preserves Terminal Lifecycle
+The frontend conversation lifecycle MUST prevent realtime work belonging to a terminal turn from re-opening processing or mutating that turn's live state after the turn has reached `completed`, `error`, or `stalled`.
+
+#### Scenario: late realtime delta cannot reopen processing
+- **WHEN** a turn has been marked terminal by completed, error, or stalled settlement
+- **AND** a realtime delta for the same thread and turn arrives later
+- **THEN** the frontend MUST NOT call `markProcessing(true)` for that thread because of the stale delta
+- **AND** the stale delta MUST NOT append live assistant, reasoning, tool, command, terminal, or file-change output for that terminal turn
+
+#### Scenario: queued realtime work self-cancels after terminal settlement
+- **WHEN** realtime work was accepted before terminal settlement but executes later through a timer batch or scheduled transition
+- **AND** the work belongs to the now-terminal turn
+- **THEN** the frontend MUST drop the work at execution time
+- **AND** the terminal lifecycle state MUST remain settled
+
+#### Scenario: raw item handler skips terminal turn before downstream mutation
+- **WHEN** a raw item snapshot enters the event handler for a turn that is already terminal
+- **THEN** the event handler MUST skip the event before invoking downstream item/realtime mutation handlers
+- **AND** downstream continuation evidence or live processing side effects MUST NOT be produced for that stale event
+
+#### Scenario: newer active turn is not blocked by old terminal fence
+- **WHEN** a newer turn starts on the same thread after an older turn has been marked terminal
+- **THEN** realtime events carrying the newer turn id MUST continue through normal realtime handling
+- **AND** the terminal fence for the older turn MUST NOT suppress the newer turn's visible output or lifecycle state
+
+### Requirement: Final Assistant Evidence Enables Conservative Completion Settlement
+When normal `turn/completed` settlement is rejected but final assistant output is already visible, the frontend MUST allow a conservative fallback settlement only when no newer active turn exists for the thread.
+
+#### Scenario: rejected completion with visible final output settles stale processing
+- **WHEN** `turn/completed` is rejected by the normal active-turn guard
+- **AND** final assistant output evidence exists for the same diagnostic turn
+- **AND** the thread has no newer active turn
+- **THEN** the frontend MUST clear residual processing state for that thread
+- **AND** the frontend MUST keep the assistant output in final completed state
+- **AND** the fallback settlement MUST emit diagnostic evidence that it was applied
+
+#### Scenario: fallback settlement does not clear newer active turn
+- **WHEN** `turn/completed` for an older turn is rejected
+- **AND** final assistant output evidence exists for the older turn
+- **AND** the same thread already has a newer active turn
+- **THEN** the frontend MUST NOT clear processing for the thread through fallback settlement
+- **AND** the newer active turn marker MUST remain intact
+
+### Requirement: Terminal Fence Requires Turn Identity Propagation
+Realtime event routing MUST preserve available `turnId` values from legacy and normalized fallback event paths to the final frontend handlers that apply terminal turn filtering.
+
+#### Scenario: fallback output event keeps turn identity
+- **WHEN** command output, terminal interaction, file-change output, reasoning delta, agent delta, or fallback assistant completion is routed through a legacy or normalized fallback path
+- **THEN** the routed handler call MUST include the event's `turnId` when the source event provides it
+- **AND** terminal turn filtering MUST be able to apply exact-turn matching to that event
+
+#### Scenario: missing turn identity does not overblock newer events
+- **WHEN** a realtime event does not provide a usable `turnId`
+- **THEN** the frontend MUST avoid treating that event as an exact match for an unrelated terminal turn
+- **AND** newer turn events with explicit turn ids MUST remain preferred for terminal fence decisions
+
+### Requirement: Conversation Restore MUST Resolve Engine From Active Thread
+When restoring or rendering an existing conversation thread, the system MUST resolve the conversation engine from the active thread identity before falling back to the global engine selector.
+
+#### Scenario: Claude history opens while global engine is Codex
+- **WHEN** the global selected engine is `codex`
+- **AND** the active thread metadata identifies the thread as `claude`
+- **THEN** the conversation render state MUST use `claude`
+- **AND** the message surface MUST NOT show Codex history loading or Codex transcript recovery copy for that Claude thread
+
+#### Scenario: thread metadata is unavailable
+- **WHEN** an active thread has no usable `selectedEngine` or `engineSource`
+- **AND** the thread id does not contain a supported engine prefix
+- **THEN** the conversation render state MAY fall back to the global selected engine
+- **AND** new-session composer engine selection MUST remain unchanged
+
+### Requirement: Claude Progressive Mode Rollout MUST Preserve Conversation Continuity
+
+Claude mode availability changes MUST preserve conversation lifecycle continuity and MUST NOT require users to switch to a different engine contract.
+
+#### Scenario: current claude mode expansion does not reset thread flow
+- **WHEN** Claude exposes `default`, `plan`, and `full-access`
+- **THEN** existing Claude thread creation and message send flow MUST remain continuous
+- **AND** previously working `full-access` conversations MUST continue without lifecycle regression
+
+#### Scenario: approval-dependent claude modes stay inside existing event stream
+- **WHEN** Claude mode execution requires GUI approval
+- **THEN** approval requests MUST flow through the existing conversation event stream
+- **AND** user-visible lifecycle progression MUST remain consistent with other engines using the same approval surface
+
+### Requirement: Claude Synthetic Approval Resume MUST Preserve History Recoverability
+
+Claude synthetic approval handling MUST preserve both live continuity and restart recoverability.
+
+#### Scenario: approval completion resumes the interrupted claude turn
+- **WHEN** the last pending Claude synthetic approval in a turn is resolved
+- **THEN** runtime MUST continue the interrupted Claude session instead of ending permanently at the approval summary
+- **AND** the user MUST still receive the post-approval execution result in the same conversation flow
+
+#### Scenario: synthetic approval markers do not leak into user-visible history
+- **WHEN** approval resume metadata is carried through Claude history using an internal marker payload
+- **THEN** loaders and thread item parsing MUST strip the raw marker from visible text
+- **AND** the payload MUST be reconstructed into structured lifecycle items such as `File changes`
+
+#### Scenario: multi-approval turns finalize only after the last request resolves
+- **WHEN** multiple Claude approvals are pending for the same turn
+- **THEN** the conversation MUST remain resumable until every pending approval is answered
+- **AND** intermediate approvals MUST NOT prematurely finalize the turn
+
+### Requirement: Claude Inline Approval Surface MUST Stay Decision-Oriented
+
+Claude synthetic approvals MUST remain readable and decision-oriented in the shared conversation surface rather than degrading into generic notices or raw content dumps.
+
+#### Scenario: inline approval renders as a distinct approval card near the active turn tail
+- **WHEN** Claude synthetic approval is rendered inline inside the message canvas
+- **THEN** the UI MUST present it as a visually distinct approval card with clear approval affordance
+- **AND** the inline placement MUST anchor near the bottom of the active conversation flow instead of occupying the top reading entry
+
+#### Scenario: approval detail hides large raw content fields by default
+- **WHEN** Claude synthetic approval payload contains large raw body fields such as `content`, `diff`, `patch`, or equivalent rewritten text
+- **THEN** the inline approval detail MUST hide those raw fields by default
+- **AND** the card MUST continue surfacing compact decision-critical metadata such as path, command summary, tool label, or approval note
+
+### Requirement: Exit Plan Handoff MUST Keep UI Mode And Execution Mode In Sync
+
+When Claude `plan` execution reaches `ExitPlanMode`, the UI MUST require an explicit execution-mode choice and MUST NOT leave the conversation selector showing `plan` after execution starts.
+
+#### Scenario: exit plan card offers explicit execution mode choices
+- **WHEN** Claude renders an `ExitPlanMode` handoff card after plan confirmation
+- **THEN** the card MUST state that continuing execution requires leaving planning mode
+- **AND** it MUST provide explicit actions for `default` and `full-access`
+
+#### Scenario: choosing default approval mode syncs selector before execution
+- **WHEN** user clicks the `default` execution action from the `ExitPlanMode` card
+- **THEN** the collaboration selector MUST leave `plan`
+- **AND** the access selector MUST switch to `default`
+- **AND** the follow-up implementation prompt MUST run with `default` access mode
+
+#### Scenario: choosing full access syncs selector before execution
+- **WHEN** user clicks the `full-access` execution action from the `ExitPlanMode` card
+- **THEN** the collaboration selector MUST leave `plan`
+- **AND** the access selector MUST switch to `full-access`
+- **AND** the follow-up implementation prompt MUST run with `full-access`
+
+#### Scenario: historical claude thread still enforces read-only while plan mode is active
+- **WHEN** user reopens an existing Claude thread, switches conversation UI to `plan`, and sends a follow-up request
+- **THEN** runtime MUST send the follow-up turn as `read-only`
+- **AND** stale writable access state from the same thread MUST NOT leak through and allow file creation or approval prompts
+
+### Requirement: Claude Stream Startup Failure MUST Deterministically Settle Turn Lifecycle
+
+Within the unified conversation lifecycle, a Claude turn that never establishes a valid realtime stream MUST leave pseudo-processing through a deterministic terminal error.
+
+#### Scenario: no valid claude stream settles processing
+
+- **WHEN** a Claude foreground turn starts in the GUI
+- **AND** backend cannot observe any valid Claude stream-json event within the bounded startup window
+- **THEN** the turn MUST settle as terminal error
+- **AND** the conversation MUST leave ordinary processing state for that turn
+- **AND** the user MUST regain an interactive thread state without manually restarting the app
+
+#### Scenario: startup failure remains engine-scoped
+
+- **WHEN** Claude stream startup timeout handling is introduced
+- **THEN** Codex, Gemini, and OpenCode lifecycle behavior MUST remain unchanged
+- **AND** provider-specific compatibility logic MUST NOT leak into the shared lifecycle layer
 

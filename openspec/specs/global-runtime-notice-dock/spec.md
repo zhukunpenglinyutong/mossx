@@ -1,7 +1,9 @@
 # global-runtime-notice-dock Specification
 
 ## Purpose
-TBD - created by archiving change add-global-runtime-notice-dock. Update Purpose after archive.
+
+Defines the global-runtime-notice-dock behavior contract, covering App MUST Provide A Global Runtime Notice Dock In The Bottom-Right Corner.
+
 ## Requirements
 ### Requirement: App MUST Provide A Global Runtime Notice Dock In The Bottom-Right Corner
 

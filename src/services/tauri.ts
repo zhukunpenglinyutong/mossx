@@ -134,15 +134,30 @@ export {
 export type { RuntimeLogSessionSnapshot, RuntimeLogSessionStatus, RuntimeProfileDescriptor } from "./tauri/terminalRuntime";
 export {
   projectMemoryCaptureAuto,
+  projectMemoryCaptureTurnInput,
+  projectMemoryCompleteTurn,
   projectMemoryCreate,
   projectMemoryDelete,
+  projectMemoryDiagnostics,
   projectMemoryGet,
+  projectMemoryGetDetail,
   projectMemoryGetSettings,
   projectMemoryList,
+  projectMemoryListSummary,
+  projectMemoryReconcile,
   projectMemoryUpdate,
   projectMemoryUpdateSettings,
 } from "./tauri/projectMemory";
-export type { ProjectMemoryItem, ProjectMemoryListResult, ProjectMemorySettings } from "./tauri/projectMemory";
+export type {
+  NormalizedConversationTurnPayload,
+  ProjectMemoryDiagnosticsResult,
+  ProjectMemoryHealthState,
+  ProjectMemoryItem,
+  ProjectMemoryListResult,
+  ProjectMemoryReconcileResult,
+  ProjectMemoryReviewState,
+  ProjectMemorySettings,
+} from "./tauri/projectMemory";
 export {
   noteCardArchive,
   noteCardCreate,
@@ -1293,6 +1308,26 @@ export type WorkspaceFilesResponse = {
   directories: string[];
   gitignored_files: string[];
   gitignored_directories: string[];
+  scan_state?: WorkspaceFileScanState;
+  limit_hit?: boolean;
+  directory_entries?: WorkspaceDirectoryEntry[];
+};
+
+export type WorkspaceFileScanState = "complete" | "partial";
+
+export type WorkspaceDirectoryChildState =
+  | "unknown"
+  | "loaded"
+  | "empty"
+  | "partial";
+
+export type WorkspaceDirectorySpecialKind = "dependency" | "build_artifact";
+
+export type WorkspaceDirectoryEntry = {
+  path: string;
+  child_state: WorkspaceDirectoryChildState;
+  special_kind?: WorkspaceDirectorySpecialKind | null;
+  has_more?: boolean;
 };
 
 export type WorkspaceTextSearchMatch = {

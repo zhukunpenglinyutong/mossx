@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-03-23T11:55:18.587Z",
+  "generatedAt": "2026-05-13T15:51:23.671Z",
   "reports": [
     {
       "minutes": 5,
-      "avgCpuDropPct": 42.58797385866049,
+      "avgCpuDropPct": 39.760251294676976,
       "peakFrameDropPct": 30.76923076923077,
       "gatePass": true,
       "baseline": {
@@ -18,10 +18,10 @@
         "metrics": {
           "totalEvents": 1620,
           "totalActions": 5040,
-          "wallTimeMs": 133.3535,
-          "cpuTimeMs": 213.302,
-          "p95ActionMs": 0.12008400000001984,
-          "maxActionMs": 0.9339580000000183,
+          "wallTimeMs": 199.39554099999998,
+          "cpuTimeMs": 294.475,
+          "p95ActionMs": 0.16645899999991798,
+          "maxActionMs": 2.229832999999985,
           "averageActionsPerFrame": 28,
           "peakActionsPerFrame": 52
         }
@@ -38,10 +38,10 @@
         "metrics": {
           "totalEvents": 1620,
           "totalActions": 3600,
-          "wallTimeMs": 113.1321670000001,
-          "cpuTimeMs": 122.461,
-          "p95ActionMs": 0.11637500000006185,
-          "maxActionMs": 0.3784170000000131,
+          "wallTimeMs": 161.16724999999985,
+          "cpuTimeMs": 177.391,
+          "p95ActionMs": 0.164417000000185,
+          "maxActionMs": 0.8123329999998532,
           "averageActionsPerFrame": 20,
           "peakActionsPerFrame": 36
         }
@@ -49,7 +49,7 @@
     },
     {
       "minutes": 60,
-      "avgCpuDropPct": 0.38773324322337654,
+      "avgCpuDropPct": 0.20069722369458468,
       "peakFrameDropPct": 30.76923076923077,
       "gatePass": true,
       "baseline": {
@@ -64,10 +64,10 @@
         "metrics": {
           "totalEvents": 19440,
           "totalActions": 60480,
-          "wallTimeMs": 15474.368416000001,
-          "cpuTimeMs": 15589.842,
-          "p95ActionMs": 1.3415829999994457,
-          "maxActionMs": 2.41150000000016,
+          "wallTimeMs": 21368.747958,
+          "cpuTimeMs": 21565.819,
+          "p95ActionMs": 1.8439579999976559,
+          "maxActionMs": 4.540625000001455,
           "averageActionsPerFrame": 28,
           "peakActionsPerFrame": 52
         }
@@ -84,10 +84,10 @@
         "metrics": {
           "totalEvents": 19440,
           "totalActions": 43200,
-          "wallTimeMs": 15424.046042,
-          "cpuTimeMs": 15529.395,
-          "p95ActionMs": 1.4206250000024738,
-          "maxActionMs": 2.4261660000011034,
+          "wallTimeMs": 21446.872416,
+          "cpuTimeMs": 21522.537,
+          "p95ActionMs": 1.9662499999976717,
+          "maxActionMs": 4.010833000000275,
           "averageActionsPerFrame": 20,
           "peakActionsPerFrame": 36
         }

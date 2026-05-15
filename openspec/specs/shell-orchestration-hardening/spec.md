@@ -1,7 +1,9 @@
 # shell-orchestration-hardening Specification
 
 ## Purpose
-TBD - created by archiving change split-app-shell-orchestration. Update Purpose after archive.
+
+Defines the shell-orchestration-hardening behavior contract, covering App Shell Orchestration Extraction Compatibility.
+
 ## Requirements
 ### Requirement: App Shell Orchestration Extraction Compatibility
 The system SHALL preserve the effective `AppShell` layout and context contracts when orchestration logic is moved into `app-shell-parts` hooks.

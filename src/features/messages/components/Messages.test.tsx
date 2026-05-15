@@ -940,6 +940,7 @@ describe("Messages", () => {
     );
 
     expect(container.querySelector(".memory-context-summary-card")).toBeTruthy();
+    expect(container.querySelector(".message.assistant .bubble")).toBeNull();
     expect(container.querySelector(".markdown")).toBeNull();
     const toggle = container.querySelector(".memory-context-summary-toggle");
     expect(toggle).toBeTruthy();
@@ -977,6 +978,11 @@ describe("Messages", () => {
     );
 
     expect(container.querySelector(".memory-context-summary-card")).toBeTruthy();
+    const bubble = container.querySelector(".message.user .bubble");
+    const memoryCard = container.querySelector(".memory-context-summary-card");
+    expect(bubble).toBeTruthy();
+    expect(memoryCard).toBeTruthy();
+    expect(bubble?.contains(memoryCard)).toBe(false);
     const userText = container.querySelector(".user-collapsible-text-content");
     expect(userText?.textContent ?? "").toBe("我的手机是什么牌子的");
     expect(userText?.textContent ?? "").not.toContain("用户输入：你知道苹果手机吗");
@@ -990,6 +996,283 @@ describe("Messages", () => {
       const content = container.querySelector(".memory-context-summary-content");
       expect(content?.textContent ?? "").toContain("[对话记录]");
       expect(content?.textContent ?? "").toContain("助手输出摘要");
+    });
+  });
+
+  it("renders codex memory-scout references as standalone context resources", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "codex-user-memory-scout-1",
+        kind: "message",
+        role: "user",
+        text: [
+          '<project-memory source="memory-scout" count="1" status="ok" truncated="false">',
+          "Memory Brief:",
+          "1. [conversation_turn] 项目分析 (memoryId=m-1)",
+          "   reason: Matched query terms: 项目",
+          "   summary: 历史对话里已经分析过这个项目",
+          "   source: threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+          "</project-memory>",
+          "",
+          "以前做过项目分析吗",
+        ].join("\n"),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-memory-scout"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const bubble = container.querySelector(".message.user .bubble");
+    const memoryCard = container.querySelector(".memory-context-summary-card");
+    expect(memoryCard).toBeTruthy();
+    expect(bubble).toBeTruthy();
+    expect(bubble?.contains(memoryCard)).toBe(false);
+    expect(container.querySelector(".user-collapsible-text-content")?.textContent ?? "").toBe(
+      "以前做过项目分析吗",
+    );
+    expect(bubble?.textContent ?? "").not.toContain("Memory Brief");
+
+    const toggle = container.querySelector(".memory-context-summary-toggle");
+    expect(toggle).toBeTruthy();
+    if (!toggle) {
+      return;
+    }
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      const content = container.querySelector(".memory-context-summary-content");
+      expect(content?.textContent ?? "").toContain("项目分析");
+      expect(content?.textContent ?? "").toContain("engine=codex");
+    });
+  });
+
+  it("renders retrieval pack references with stable memory indexes outside the user bubble", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "codex-user-memory-pack-1",
+        kind: "message",
+        role: "user",
+        text: [
+          '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+          "Cleaned Context:",
+          "- [M1] 项目使用 Spring Boot 2.7 + Java 11。",
+          "",
+          "Conflicts:",
+          "- none",
+          "",
+          "Irrelevant Records:",
+          "- none",
+          "",
+          "Source Records:",
+          "[M1] memoryId=m-pack-1 title=项目技术栈 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+          "Original user input:",
+          "项目技术栈是什么",
+          "Original assistant response:",
+          "项目使用 Spring Boot 2.7 + Java 11。",
+          "",
+          "Instruction:",
+          "Use relevant records as prior project context.",
+          "</project-memory-pack>",
+          "",
+          "继续分析项目",
+        ].join("\n"),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-memory-pack"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const bubble = container.querySelector(".message.user .bubble");
+    const memoryCard = container.querySelector(".memory-context-summary-card");
+    expect(memoryCard).toBeTruthy();
+    expect(bubble).toBeTruthy();
+    expect(bubble?.contains(memoryCard)).toBe(false);
+    expect(container.querySelector(".user-collapsible-text-content")?.textContent ?? "").toBe(
+      "继续分析项目",
+    );
+    expect(bubble?.textContent ?? "").not.toContain("project-memory-pack");
+
+    const toggle = container.querySelector(".memory-context-summary-toggle");
+    expect(toggle).toBeTruthy();
+    if (!toggle) {
+      return;
+    }
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      const content = container.querySelector(".memory-context-summary-content");
+      expect(content?.querySelector(".memory-context-summary-record")).toBeTruthy();
+      expect(content?.querySelector(".memory-context-summary-record-index")?.textContent).toBe(
+        "#1",
+      );
+      expect(content?.textContent ?? "").toContain("项目技术栈");
+      expect(content?.textContent ?? "").not.toContain("Spring Boot");
+      expect(content?.textContent ?? "").not.toContain("Original user input");
+    });
+  });
+
+  it("uses unique display indexes for multiple memory packs and exposes the real sent payload", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "codex-user-memory-pack-detail-1",
+        kind: "message",
+        role: "user",
+        text: [
+          '<project-memory-pack source="manual-selection" count="1" cleaned="false" cleanerStatus="source_records_only" truncated="false">',
+          "Cleaned Context:",
+          "- source records only",
+          "",
+          "Source Records:",
+          "[M1] memoryId=m-manual-1 title=手动选择记忆 recordKind=conversation_turn sourceType=conversation_turn threadId=t-1 turnId=turn-1 engine=codex updatedAt=1",
+          "Original user input:",
+          "手动记忆问题",
+          "Original assistant response:",
+          "手动记忆回答",
+          "",
+          "Instruction:",
+          "Use relevant records as prior project context.",
+          "</project-memory-pack>",
+          "",
+          '<project-memory-pack source="memory-scout" count="1" cleaned="true" cleanerStatus="cleaned" truncated="false">',
+          "Cleaned Context:",
+          "### 自动记忆摘要",
+          "",
+          "- **重点**：自动引用事实",
+          "",
+          "Source Records:",
+          "[M1] memoryId=m-scout-1 title=自动引用记忆 recordKind=conversation_turn sourceType=conversation_turn threadId=t-2 turnId=turn-2 engine=codex updatedAt=2",
+          "Original user input:",
+          "自动记忆问题",
+          "Original assistant response:",
+          "自动记忆回答",
+          "",
+          "Instruction:",
+          "Use relevant records as prior project context.",
+          "</project-memory-pack>",
+          "",
+          "继续分析",
+        ].join("\n"),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-memory-pack-detail"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const toggle = container.querySelector(".memory-context-summary-toggle");
+    expect(toggle).toBeTruthy();
+    if (!toggle) {
+      return;
+    }
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(
+        [...container.querySelectorAll(".memory-context-summary-record-index")].map(
+          (node) => node.textContent,
+        ),
+      ).toEqual(["#1", "#2"]);
+      const cardText = container.querySelector(".memory-context-summary-content")?.textContent ?? "";
+      expect(cardText).toContain("手动选择记忆");
+      expect(cardText).toContain("自动引用记忆");
+      expect(cardText).not.toContain("手动记忆问题");
+      expect(cardText).not.toContain("自动记忆问题");
+    });
+
+    const detailButton = container.querySelector(".memory-context-summary-detail-button");
+    expect(detailButton).toBeTruthy();
+    if (!detailButton) {
+      return;
+    }
+    fireEvent.click(detailButton);
+    await waitFor(() => {
+      const dialog = document.body.querySelector(".memory-context-payload-dialog");
+      expect(dialog?.querySelector(".memory-context-payload-dialog-close")?.textContent).toBe(
+        "×",
+      );
+      expect(
+        dialog?.querySelector(".memory-context-payload-markdown h3")?.textContent,
+      ).toBe("自动记忆摘要");
+      expect(dialog?.querySelector(".memory-context-payload-markdown strong")?.textContent).toBe(
+        "重点",
+      );
+      expect(dialog?.textContent ?? "").toContain(
+        '<project-memory-pack source="manual-selection"',
+      );
+      expect(dialog?.textContent ?? "").toContain(
+        '<project-memory-pack source="memory-scout"',
+      );
+      expect(dialog?.textContent ?? "").toContain("[M1] memoryId=m-manual-1");
+      expect(dialog?.textContent ?? "").toContain("[M1] memoryId=m-scout-1");
+      expect(dialog?.textContent ?? "").toContain("Original user input:");
+    });
+  });
+
+  it("formats legacy markdown memory summaries inside the normalized context card", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "memory-summary-markdown-1",
+        kind: "message",
+        role: "assistant",
+        text: [
+          "【记忆上下文摘要】",
+          "### 项目约束",
+          "",
+          "- 必须保留 Markdown 列表",
+          "- `Memory Reference` 只展示一张卡",
+        ].join("\n"),
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-memory-markdown"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const toggle = container.querySelector(".memory-context-summary-toggle");
+    expect(toggle).toBeTruthy();
+    if (!toggle) {
+      return;
+    }
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(container.querySelector(".memory-context-summary-markdown h3")?.textContent).toBe(
+        "项目约束",
+      );
+      expect(container.querySelectorAll(".memory-context-summary-markdown li")).toHaveLength(2);
+      expect(container.querySelector(".memory-context-summary-markdown code")?.textContent).toBe(
+        "Memory Reference",
+      );
     });
   });
 

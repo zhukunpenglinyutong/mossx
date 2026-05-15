@@ -1,7 +1,9 @@
 # shared-session-thread Specification
 
 ## Purpose
-TBD - created by archiving change add-shared-session-thread. Update Purpose after archive.
+
+Defines the shared-session-thread behavior contract, covering Shared Session Is A Distinct Immutable Conversation Type.
+
 ## Requirements
 ### Requirement: Shared Session Is A Distinct Immutable Conversation Type
 
