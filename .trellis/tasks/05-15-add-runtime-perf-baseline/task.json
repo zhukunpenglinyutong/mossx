@@ -1,0 +1,66 @@
+{
+  "id": "add-runtime-perf-baseline",
+  "name": "add-runtime-perf-baseline",
+  "title": "Add runtime perf baseline",
+  "description": "建立 v0.4.18 后续性能优化的 fixture-based baseline：四场景 / 三指标 / 双轨归档报告，关联 OpenSpec change add-runtime-perf-baseline。",
+  "status": "planning",
+  "dev_type": "fullstack",
+  "scope": "perf,diagnostics,realtime",
+  "package": null,
+  "priority": "P1",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-05-15",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feature/v0.4.18",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/changes/add-runtime-perf-baseline/proposal.md",
+    "openspec/changes/add-runtime-perf-baseline/design.md",
+    "openspec/changes/add-runtime-perf-baseline/tasks.md",
+    "openspec/changes/add-runtime-perf-baseline/specs/runtime-perf-baseline/spec.md",
+    "scripts/realtime-perf-report.ts",
+    "src/services/rendererDiagnostics.ts",
+    "src/features/threads/contracts/realtimeReplayHarness.ts",
+    "src/features/threads/contracts/realtimeReplayFixture.ts"
+  ],
+  "notes": "OpenSpec change strict-valid (260/260). Baseline 阶段不修改业务代码；scope 严格限制在 src/services/perfBaseline/* + scripts/perf-* + docs/perf/*。Validation: npm run typecheck; npm run test; npm run perf:realtime:boundary-guard; openspec validate add-runtime-perf-baseline --strict --no-interactive。",
+  "meta": {
+    "openspecChange": "add-runtime-perf-baseline",
+    "capability": "runtime-perf-baseline",
+    "noBusinessCodeChange": true
+  }
+}
