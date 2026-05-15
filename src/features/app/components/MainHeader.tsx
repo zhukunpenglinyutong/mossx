@@ -713,7 +713,7 @@ export function MainHeader({
                       <div className="branch-empty">{t("workspace.noBranchesFound")}</div>
                     )}
                   </div>
-                  {error && <div className="branch-error">{error}</div>}
+                  {error ? <div className="branch-error">{error}</div> : null}
                 </div>
               )}
             </div>

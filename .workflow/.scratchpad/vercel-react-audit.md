@@ -149,7 +149,7 @@
 
 ---
 
-### - [ ] P1-3. 124 处 `condition && <JSX>` 渲染陷阱
+### - [x] P1-3. 124 处 `condition && <JSX>` 渲染陷阱
 
 - **规则**：`rendering-conditional-render`
 - **真危险点（约 15-20 处涉及 `number | null` 和字符串状态）**：
@@ -383,7 +383,7 @@
 
 - [x] P1-1 重型 Panel 代码分割
 - [x] P1-2 lucide-react 导入统一（搭配 eslint-plugin no-restricted-imports）
-- [ ] P1-3 危险 `&&` 渲染重构（优先涉及 number/string 的）
+- [x] P1-3 危险 `&&` 渲染重构（优先涉及 number/string 的）
 - [ ] P1-4 键盘事件统一调度
 - [ ] P1-5 Messages 添加 useDeferredValue
 

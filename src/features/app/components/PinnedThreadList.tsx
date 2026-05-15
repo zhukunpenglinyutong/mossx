@@ -213,7 +213,7 @@ export function PinnedThreadList({
                     {isAutoNaming && (
                       <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
                     )}
-                    {relativeTime && <span className="thread-time">{relativeTime}</span>}
+                    {relativeTime ? <span className="thread-time">{relativeTime}</span> : null}
                   </div>
                 </TooltipTrigger>
               </PopoverAnchor>
