@@ -741,6 +741,12 @@ describe("ProjectMemoryPanel", () => {
         reviewState: "kept",
       });
     });
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", { name: "Convert to manual note" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Convert to manual note" }));
     await waitFor(() => {
@@ -752,8 +758,10 @@ describe("ProjectMemoryPanel", () => {
         }),
       );
     });
-    expect(hookState.updateMemory).toHaveBeenCalledWith("review-turn", {
-      reviewState: "converted",
+    await waitFor(() => {
+      expect(hookState.updateMemory).toHaveBeenCalledWith("review-turn", {
+        reviewState: "converted",
+      });
     });
   });
 
