@@ -527,6 +527,37 @@ async fn send_message_treats_stream_result_as_raw_and_emits_single_final_complet
 }
 
 #[tokio::test]
+async fn send_message_reports_exit_metadata_when_claude_fails_without_output() {
+    #[cfg(windows)]
+    let script = "@echo off\r\nexit /b 1\r\n";
+    #[cfg(not(windows))]
+    let script = "#!/bin/sh\nexit 1\n";
+    let (root, workspace_path, script_path) = create_fake_claude_script(script);
+    let session = test_session_with_bin(workspace_path, script_path);
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "line1\nline2".to_string();
+    params.access_mode = Some("read-only".to_string());
+
+    let error = session
+        .send_message(params, "turn-exit-no-output")
+        .await
+        .expect_err("non-zero fake claude should fail");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(error.contains("Claude exited with status"));
+    assert!(error.contains("Diagnostics:"));
+    assert!(error.contains("input_format=stream-json"));
+    assert!(error.contains("include_hook_events=true"));
+    assert!(error.contains("permission_mode=read-only"));
+    assert!(error.contains("No stdout/stderr diagnostics were observed"));
+    let (turn_error, code) = turn_error_event(&events).expect("turn error event");
+    assert!(turn_error.contains("input_format=stream-json"));
+    assert!(code.is_none());
+}
+
+#[tokio::test]
 async fn send_message_times_out_when_claude_stream_never_emits_valid_event() {
     #[cfg(windows)]
     let script = "@echo off\r\nping 127.0.0.1 -n 15 >nul\r\nexit /b 0\r\n";

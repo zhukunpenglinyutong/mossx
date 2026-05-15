@@ -361,6 +361,34 @@ impl ClaudeSession {
         format!("{base}. Diagnostic sample:\n{}", sample)
     }
 
+    fn build_process_exit_error(
+        status: std::process::ExitStatus,
+        error_output: &str,
+        diagnostic_sample: &str,
+        use_stream_json_input: bool,
+        include_hook_events: bool,
+        access_mode: Option<&str>,
+    ) -> String {
+        let detail = error_output.trim();
+        if !detail.is_empty() {
+            return detail.to_string();
+        }
+
+        let sample = diagnostic_sample.trim();
+        let diagnostic_detail = if sample.is_empty() {
+            "No stdout/stderr diagnostics were observed.".to_string()
+        } else {
+            format!("Diagnostic sample:\n{sample}")
+        };
+
+        format!(
+            "Claude exited with status: {status}. Diagnostics: input_format={}, include_hook_events={}, permission_mode={}. {diagnostic_detail}",
+            if use_stream_json_input { "stream-json" } else { "argv" },
+            include_hook_events,
+            access_mode.unwrap_or("current"),
+        )
+    }
+
     fn stream_diagnostic_sample_snapshot(sample: &Arc<StdMutex<String>>) -> String {
         sample.lock().map(|value| value.clone()).unwrap_or_default()
     }
@@ -1322,11 +1350,14 @@ impl ClaudeSession {
         // caused silent failures when the CLI produced partial output before crashing.
         if let Some(status) = status {
             if !status.success() {
-                let error_msg = if !error_output.is_empty() {
-                    error_output.trim().to_string()
-                } else {
-                    format!("Claude exited with status: {}", status)
-                };
+                let error_msg = Self::build_process_exit_error(
+                    status,
+                    &error_output,
+                    &Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample),
+                    use_stream_json_input,
+                    include_hook_events,
+                    params.access_mode.as_deref(),
+                );
 
                 if include_hook_events && Self::is_unknown_include_hook_events_error(&error_msg) {
                     self.clear_turn_ephemeral_state(turn_id);
