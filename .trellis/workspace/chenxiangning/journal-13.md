@@ -1884,3 +1884,64 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 477: Archive add-runtime-perf-baseline 并同步主 spec
+
+**Date**: 2026-05-16
+**Task**: Archive add-runtime-perf-baseline 并同步主 spec
+**Branch**: `feature/v0.5`
+
+### Summary
+
+verify 通过后归档变更，把 7 个 ADDED Requirements materialize 到 openspec/specs/runtime-perf-baseline/。4 个 follow-up 占位草稿保留为 unvalidated 状态待后续起跑。
+
+### Main Changes
+
+
+## Summary
+
+按 OpenSpec verify → archive 闭环收口 add-runtime-perf-baseline。
+
+## Verify 结论
+
+- 4 个业务文件零 diff（useThreadMessaging / useAppServerEvents / Composer / MessagesRows）
+- tasks 67/67 全勾，4 artifacts complete
+- `openspec validate --strict` 通过，7 个 ADDED Requirements 全部带 Scenario
+- verification.md 列出 19 个通过 check + 残留风险（darwin cold-start unsupported）
+
+## Archive 动作
+
+- 变更目录搬迁：`openspec/changes/add-runtime-perf-baseline/` → `openspec/changes/archive/2026-05-15-add-runtime-perf-baseline/`
+- 主 spec 落盘：`openspec/specs/runtime-perf-baseline/spec.md`（+7 added / 0 modified / 0 removed）
+- 全仓 spec validate：260 passed / 4 failed
+- 4 个 failed 全是预期占位草稿：optimize-bundle-chunking / optimize-long-list-virtualization / optimize-realtime-event-batching / refactor-mega-hub-split（只有 proposal.md，无 deltas，task 9.x V 只要求 "draft"）
+
+## Status
+
+[OK] **Completed** — capability `runtime-perf-baseline` 进入主 spec，可作为后续 follow-up 提案的契约引用源。
+
+## Next Steps
+
+1. 是否 push（本地 ahead 5 commits）由你决定
+2. 起跑下一刀：建议 `optimize-realtime-event-batching`（5 秒 firstTokenLatency 是最痛点，harness 已就位，风险面最小）
+   - 用 `/open-spec:continue optimize-realtime-event-batching` 或 `/open-spec:ff optimize-realtime-event-batching` 把它从 proposal-only 升级到完整四件套
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8bfe9ccf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
