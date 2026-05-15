@@ -23,8 +23,8 @@ export function ClientDocumentationWindow() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     defaultNode?.id ?? null,
   );
-  const isMacDesktop = useMemo(() => isMacPlatform(), []);
-  const isWindowsDesktop = useMemo(() => isWindowsPlatform(), []);
+  const isMacDesktop = isMacPlatform();
+  const isWindowsDesktop = isWindowsPlatform();
   const appClassName = useMemo(
     () => `app layout-desktop${isWindowsDesktop ? " windows-desktop" : ""}${
       isMacDesktop ? " macos-desktop" : ""

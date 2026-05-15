@@ -210,7 +210,7 @@
 
 ## 🟡 P2 - 中期改进（中等收益）
 
-### - [ ] P2-1. useState 非原始默认值（7 处 Sidebar）
+### - [x] P2-1. useState 非原始默认值（7 处 Sidebar）
 
 - **文件**：`src/features/app/components/Sidebar.tsx:550-572`
 - **规则**：`rerender-lazy-state-init`
@@ -268,7 +268,7 @@
 
 ---
 
-### - [ ] P2-5. 简单值用了 useMemo
+### - [x] P2-5. 简单值用了 useMemo
 
 - **文件**：
   - `src/features/app/components/Sidebar.tsx:536` - `useMemo(() => isMacPlatform(), [])`
@@ -376,8 +376,8 @@
 - [x] P0-2 11 处 scroll passive
 - [x] P0-3 Katex 懒加载
 - [x] P0-4 RegExp 缓存
-- [ ] P2-1 Sidebar useState lazy init
-- [ ] P3-1 RichTextInput touch passive
+- [x] P2-1 Sidebar useState lazy init
+- [ ] P3-1 RichTextInput touch passive（**评估后跳过**：桌面端无触屏事件，cargo cult 优化）
 
 ### 第二周（10 小时 - 系统性优化）
 
@@ -392,8 +392,8 @@
 - [ ] P2-2 Vite manualChunks
 - [ ] P2-3 文件预览并行
 - [ ] P2-4 启动 hook 并行
-- [ ] P2-5 简单 useMemo 清理
-- [ ] P3 系列收尾
+- [x] P2-5 简单 useMemo 清理
+- [ ] P3 系列收尾（**评估后**：P3-1/P3-4 跳过；P3-6 跳过 Vite 默认已启用 modulePreload；P3-2/P3-3/P3-5 ROI 太低暂缓）
 
 ---
 

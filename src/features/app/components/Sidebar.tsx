@@ -534,7 +534,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { t } = useTranslation();
   const quickSearchLabel = t("sidebar.quickSearch");
-  const isMac = useMemo(() => isMacPlatform(), []);
+  const isMac = isMacPlatform();
   const quickChatShortcutLabel = useMemo(
     () => formatShortcutForPlatform(openChatShortcut, isMac),
     [isMac, openChatShortcut],
@@ -548,29 +548,29 @@ export function Sidebar({
     [globalSearchShortcut, isMac],
   );
 
-  const [expandedWorkspaces, setExpandedWorkspaces] = useState(
-    new Set<string>(),
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
+    () => new Set(),
   );
-  const [collapsedWorktreeSections, setCollapsedWorktreeSections] = useState(
-    new Set<string>(),
+  const [collapsedWorktreeSections, setCollapsedWorktreeSections] = useState<Set<string>>(
+    () => new Set(),
   );
   const [sessionFoldersByWorkspaceId, setSessionFoldersByWorkspaceId] = useState<
     Record<string, WorkspaceSessionFolder[]>
-  >({});
+  >(() => ({}));
   const loadedSessionFolderWorkspaceIdsRef = useRef<Set<string>>(new Set());
   const [sessionFolderErrorByWorkspaceId, setSessionFolderErrorByWorkspaceId] = useState<
     Record<string, string>
-  >({});
+  >(() => ({}));
   const [sessionFolderOverrideByWorkspaceId, setSessionFolderOverrideByWorkspaceId] = useState<
     Record<string, Record<string, string | null>>
-  >({});
+  >(() => ({}));
   const [
     pendingSessionFolderIntentByWorkspaceId,
     setPendingSessionFolderIntentByWorkspaceId,
-  ] = useState<Record<string, Record<string, string>>>({});
+  ] = useState<Record<string, Record<string, string>>>(() => ({}));
   const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] = useState<
     Record<string, number>
-  >({});
+  >(() => ({}));
   const [collapsedSessionFolderIdsByWorkspaceId, setCollapsedSessionFolderIdsByWorkspaceId] = useState<
     Record<string, string[]>
   >(() => readPersistedCollapsedSessionFolderIds());
