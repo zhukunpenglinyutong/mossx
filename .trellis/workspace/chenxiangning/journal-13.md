@@ -1580,3 +1580,40 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 471: 记录 AppImage Wayland 修复验证
+
+**Date**: 2026-05-15
+**Task**: 记录 AppImage Wayland 修复验证
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+记录 desktop-cc-gui#379 的 AppImage Wayland 修复闭环
+
+### Main Changes
+
+- Updated archived OpenSpec proposal and implementation notes for `fix-linux-appimage-wayland-library-pruning`.
+- Recorded `desktop-cc-gui#379` as affected-user validation evidence for the AppImage Wayland/Mesa/EGL crash.
+- Clarified that the confirmed fix direction is packaging-level bundled `libwayland-*` pruning, while broad release claims still prefer final artifact inspection and Arch Wayland smoke.
+- Validation: `git diff --check` passed for the edited OpenSpec docs.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1263ee8e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
