@@ -105,7 +105,7 @@ function createWorkspace(id: string): WorkspaceInfo {
   return {
     id,
     name: id,
-    path: `/tmp/${id}`,
+    path: `workspace-${id}`,
     connected: true,
     settings: { sidebarCollapsed: false },
   };

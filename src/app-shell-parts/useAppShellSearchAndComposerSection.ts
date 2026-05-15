@@ -4,11 +4,100 @@ import { useGlobalSearchShortcut } from "../features/app/hooks/useGlobalSearchSh
 import { useInterruptShortcut } from "../features/app/hooks/useInterruptShortcut";
 import { usePullRequestComposer } from "../features/git/hooks/usePullRequestComposer";
 import { recordSearchResultOpen } from "../features/search/ranking/recencyStore";
-import type { SearchContentFilter, SearchResult } from "../features/search/types";
+import type { KanbanTask } from "../features/kanban/types";
+import type { SearchContentFilter, SearchResult, SearchScope } from "../features/search/types";
 import { resolveSearchScopeOnOpen } from "../features/search/utils/scope";
 import { toggleSearchContentFilters } from "../features/search/utils/contentFilters";
+import type {
+  AppSettings,
+  GitHubPullRequest,
+  GitHubPullRequestDiff,
+  MessageSendOptions,
+  WorkspaceInfo,
+} from "../types";
 
-export function useAppShellSearchAndComposerSection(ctx: any) {
+type AppShellTab = "projects" | "codex" | "spec" | "git" | "log";
+type CenterMode = "chat" | "diff" | "editor" | "memory";
+type DiffSource = "local" | "pr" | "commit";
+type FilePanelMode = "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
+type GitPanelMode = "diff" | "log" | "issues" | "prs";
+
+type ComposerSearchLegacyPassthrough = Record<string, unknown>;
+
+export type ComposerSearchShellBoundary = ComposerSearchLegacyPassthrough & {
+  activeDraft: string;
+  activeWorkspace: WorkspaceInfo | null;
+  activeWorkspaceId: string | null;
+  appSettings: Pick<AppSettings, "interruptShortcut" | "toggleGlobalSearchShortcut">;
+  canInterrupt: boolean;
+  centerMode: CenterMode;
+  clearActiveImages: () => void;
+  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
+  exitDiffView: () => void;
+  filePanelMode: FilePanelMode;
+  gitPanelMode: GitPanelMode;
+  gitPullRequestDiffs: GitHubPullRequestDiff[];
+  handleDraftChange: (draft: string) => void;
+  handleOpenFile: (filePath: string) => void;
+  handleSend: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
+  interruptTurn: () => Promise<unknown> | unknown;
+  isCompact: boolean;
+  isSearchPaletteOpen: boolean;
+  kanbanTasks: KanbanTask[];
+  queueMessage: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
+  searchPaletteQuery: string;
+  searchResults: SearchResult[];
+  searchScope: SearchScope;
+  selectWorkspace: (workspaceId: string) => void;
+  selectedPullRequest: GitHubPullRequest | null;
+  sendUserMessageToThread: (
+    workspace: WorkspaceInfo,
+    threadId: string,
+    text: string,
+    images?: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
+  setActiveTab: (tab: AppShellTab) => void;
+  setActiveThreadId: (threadId: string, workspaceId: string) => void;
+  setAppMode: (mode: "chat" | "kanban") => void;
+  setCenterMode: (mode: CenterMode) => void;
+  setDiffSource: (source: DiffSource) => void;
+  setGitPanelMode: (mode: GitPanelMode) => void;
+  setIsSearchPaletteOpen: (open: boolean) => void;
+  setKanbanViewState: (state: {
+    view: "board";
+    workspaceId: string;
+    panelId: string;
+  }) => void;
+  setPrefillDraft: (draft: { id: string; text: string; createdAt: number }) => void;
+  setSearchContentFilters: (
+    updater: (previous: SearchContentFilter[]) => SearchContentFilter[],
+  ) => void;
+  setSearchPaletteQuery: (query: string) => void;
+  setSearchPaletteSelectedIndex: (
+    updater: number | ((previous: number) => number),
+  ) => void;
+  setSearchScope: (scope: SearchScope) => void;
+  setSelectedCommitSha: (sha: string | null) => void;
+  setSelectedDiffPath: (path: string | null) => void;
+  setSelectedKanbanTaskId: (taskId: string | null) => void;
+  setSelectedPullRequest: (pullRequest: GitHubPullRequest | null) => void;
+  startThreadForWorkspace: (
+    workspaceId: string,
+    options?: { activate?: boolean },
+  ) => Promise<string | null>;
+  workspacesByPath: Map<string, WorkspaceInfo>;
+};
+
+export function useAppShellSearchAndComposerSection(ctx: ComposerSearchShellBoundary) {
   const {
     GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
     activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeGitRoot, activeImages,
