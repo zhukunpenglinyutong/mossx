@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Sidebar } from "../../app/components/Sidebar";
@@ -10,7 +10,6 @@ import { UpdateToast } from "../../update/components/UpdateToast";
 import { ErrorToasts } from "../../notifications/components/ErrorToasts";
 import { GlobalRuntimeNoticeDock } from "../../notifications/components/GlobalRuntimeNoticeDock";
 import { Composer } from "../../composer/components/Composer";
-import { GitDiffPanel } from "../../git/components/GitDiffPanel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
 import {
@@ -19,7 +18,6 @@ import {
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
-import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
 import { WorkspaceNoteCardPanel } from "../../note-cards/components/WorkspaceNoteCardPanel";
@@ -137,6 +135,17 @@ import {
   recordTopbarSessionActivation,
   type TopbarSessionWindows,
 } from "./topbarSessionTabs";
+
+const GitDiffPanel = lazy(() =>
+  import("../../git/components/GitDiffPanel").then((m) => ({ default: m.GitDiffPanel })),
+);
+const FileViewPanel = lazy(() =>
+  import("../../files/components/FileViewPanel").then((m) => ({ default: m.FileViewPanel })),
+);
+
+function HeavyPanelFallback() {
+  return <div className="heavy-panel-fallback" aria-hidden="true" />;
+}
 
 type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -2142,6 +2151,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     );
   } else {
     gitDiffPanelNode = (
+      <Suspense fallback={<HeavyPanelFallback />}>
       <GitDiffPanel
         workspaceId={options.activeWorkspace?.id ?? null}
         workspacePath={options.activeWorkspace?.path ?? null}
@@ -2233,6 +2243,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
         codeAnnotations={selectedCodeAnnotations}
       />
+      </Suspense>
     );
   }
 
@@ -2263,6 +2274,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const fileViewPanelNode =
     options.editorFilePath && options.activeWorkspace ? (
+      <Suspense fallback={<HeavyPanelFallback />}>
       <FileViewPanel
         workspaceId={options.activeWorkspace.id}
         workspacePath={options.activeWorkspace.path}
@@ -2304,6 +2316,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         saveFileShortcut={options.saveFileShortcut}
         findInFileShortcut={options.findInFileShortcut}
       />
+      </Suspense>
     ) : null;
 
   const planPanelNode = showBottomStatusPanel ? (

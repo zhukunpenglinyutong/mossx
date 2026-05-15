@@ -110,7 +110,7 @@
 
 ## 🟠 P1 - 短期改进（中高收益 + 中等成本）
 
-### - [ ] P1-1. 重型 Panel 组件未做代码分割
+### - [x] P1-1. 重型 Panel 组件未做代码分割
 
 - **文件**：`src/features/layout/hooks/useLayoutNodes.tsx:13,22`
 - **规则**：`bundle-dynamic-imports`
@@ -381,7 +381,7 @@
 
 ### 第二周（10 小时 - 系统性优化）
 
-- [ ] P1-1 重型 Panel 代码分割
+- [x] P1-1 重型 Panel 代码分割
 - [ ] P1-2 lucide-react 导入统一（搭配 eslint-plugin no-restricted-imports）
 - [ ] P1-3 危险 `&&` 渲染重构（优先涉及 number/string 的）
 - [ ] P1-4 键盘事件统一调度
