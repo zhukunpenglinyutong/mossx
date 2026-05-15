@@ -40,7 +40,7 @@
 
 ---
 
-### - [ ] P0-2. 11 处 scroll 事件监听器缺少 `passive: true`
+### - [x] P0-2. 11 处 scroll 事件监听器缺少 `passive: true`
 
 - **文件清单**：
   - `src/features/git-history/components/git-history-panel/components/GitHistoryPanelImpl.tsx`（5 处：1297, 2164, 2185, 2249, 2270）
@@ -373,7 +373,7 @@
 完成 P0 全部 4 项 + P2-1（lazy state init）+ P3-1（touch passive）：
 
 - [x] P0-1 scrollFadeDeps 反模式（Bug-fix 级别）
-- [ ] P0-2 11 处 scroll passive
+- [x] P0-2 11 处 scroll passive
 - [ ] P0-3 Katex 懒加载
 - [ ] P0-4 RegExp 缓存
 - [ ] P2-1 Sidebar useState lazy init

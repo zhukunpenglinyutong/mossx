@@ -109,11 +109,12 @@ export function ComposerContextMenuPopover({
       return;
     }
     const handleWindowChange = () => updatePosition();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", handleWindowChange);
-    window.addEventListener("scroll", handleWindowChange, true);
+    window.addEventListener("scroll", handleWindowChange, scrollOptions);
     return () => {
       window.removeEventListener("resize", handleWindowChange);
-      window.removeEventListener("scroll", handleWindowChange, true);
+      window.removeEventListener("scroll", handleWindowChange, scrollOptions);
     };
   }, [open, updatePosition]);
 

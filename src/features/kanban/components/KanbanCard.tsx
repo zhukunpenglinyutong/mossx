@@ -324,13 +324,14 @@ export function KanbanCard({
     };
 
     const rafId = window.requestAnimationFrame(evaluateMenuPlacement);
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", evaluateMenuPlacement);
-    window.addEventListener("scroll", evaluateMenuPlacement, true);
+    window.addEventListener("scroll", evaluateMenuPlacement, scrollOptions);
 
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener("resize", evaluateMenuPlacement);
-      window.removeEventListener("scroll", evaluateMenuPlacement, true);
+      window.removeEventListener("scroll", evaluateMenuPlacement, scrollOptions);
     };
   }, [menuOpen]);
 

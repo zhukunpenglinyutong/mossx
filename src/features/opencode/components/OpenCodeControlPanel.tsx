@@ -641,11 +641,12 @@ export function OpenCodeControlPanel({
       });
     };
     updateDrawerPlacement();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", updateDrawerPlacement);
-    window.addEventListener("scroll", updateDrawerPlacement, true);
+    window.addEventListener("scroll", updateDrawerPlacement, scrollOptions);
     return () => {
       window.removeEventListener("resize", updateDrawerPlacement);
-      window.removeEventListener("scroll", updateDrawerPlacement, true);
+      window.removeEventListener("scroll", updateDrawerPlacement, scrollOptions);
     };
   }, [detailOpen, visible]);
 
