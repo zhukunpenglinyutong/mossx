@@ -79,3 +79,76 @@ configure({ asyncUtilTimeout: 5000 });
 ### Next Steps
 
 - None - task complete
+
+
+## Session 479: PR #564 与 chore/bump-version-0.5 语义融合
+
+**Date**: 2026-05-16
+**Task**: PR #564 与 chore/bump-version-0.5 语义融合
+**Branch**: `feature/v0.5`
+
+### Summary
+
+合并 base 分支引入的 prewarmKatexAssets perf 与我们的 asyncUtilTimeout fix。直接双保留导致 jsdom 启动阻塞，下沉 prewarmKatexAssets 到 math-rendering 测试文件后两边能力点都保留，57/57 通过，PR 重新 MERGEABLE。
+
+### Main Changes
+
+
+## Summary
+
+PR #564 与 base 分支 `chore/bump-version-0.5` 发生冲突，按合并防回退铁律完成语义融合。
+
+## Capability Matrix
+
+| 改动 | upstream | HEAD |
+|---|---|---|
+| `configure({ asyncUtilTimeout: 5000 })` | ❌ | ✅ |
+| `prewarmKatexAssets()` beforeAll | ✅ | ❌ |
+
+## Conflict File
+
+仅 `src/test/vitest.setup.ts` 文件顶部 textual conflict。
+
+## Resolution Process
+
+1. 列能力矩阵 → 看似可直接双保留
+2. 直接双保留后本地 rewind 测试 14/39 失败（每个 5003-5009ms 刚好 timeout）
+3. 诊断：upstream 的 `prewarmKatexAssets` 在 setup beforeAll 阻塞 katex chain 加载，让 jsdom React commit 推过 5s 窗口
+4. 移除全局 setup 的 beforeAll，下沉 prewarmKatexAssets 到 Markdown.math-rendering.test.tsx file-scoped beforeAll
+5. 两边能力点全部保留：
+   - 全局 asyncUtilTimeout = 5000ms（CI 修复仍有效）
+   - 数学渲染测试仍能预热 katex（local scope 不污染其他测试）
+
+## Validation
+
+- `npm run typecheck` ✅
+- `npm run lint` ✅
+- `npx vitest run Composer.rewind-confirm.test.tsx Markdown.math-rendering.test.tsx` → 57/57 通过
+
+## PR State
+
+- Before: `mergeable: CONFLICTING / mergeStateStatus: DIRTY`
+- After: `mergeable: MERGEABLE / mergeStateStatus: UNSTABLE`（CI 重跑中）
+
+## Next Steps
+
+等 CI 在 `5fa60b2b` 上重跑结果，全绿即可推进 review/merge。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5fa60b2b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
