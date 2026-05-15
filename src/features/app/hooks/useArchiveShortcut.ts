@@ -3,6 +3,7 @@ import {
   isEditableShortcutTarget,
   matchesShortcutForPlatform,
 } from "../../../utils/shortcuts";
+import { registerKeydownHandler } from "./keyboardDispatcher";
 
 type UseArchiveShortcutOptions = {
   isEnabled: boolean;
@@ -35,7 +36,6 @@ export function useArchiveShortcut({
       event.preventDefault();
       onTrigger();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return registerKeydownHandler(handleKeyDown);
   }, [isEnabled, onTrigger, shortcut]);
 }

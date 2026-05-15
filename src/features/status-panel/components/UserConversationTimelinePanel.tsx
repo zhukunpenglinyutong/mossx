@@ -1,5 +1,8 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, ChevronDown, ChevronUp, Images } from "lucide-react";
+import ArrowUpRight from "lucide-react/dist/esm/icons/arrow-up-right";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
+import Images from "lucide-react/dist/esm/icons/images";
 import { useTranslation } from "react-i18next";
 import type { UserConversationTimeline } from "../utils/userConversationTimeline";
 

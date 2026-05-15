@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Check,
-  ChevronDown,
-  CircleCheck,
-  CircleX,
-  CloudUpload,
-  FolderTree,
-  GitBranch,
-  GitCommitHorizontal,
-  Hash,
-  Info,
-  SquareTerminal,
-} from "lucide-react";
+import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
+import CircleX from "lucide-react/dist/esm/icons/circle-x";
+import CloudUpload from "lucide-react/dist/esm/icons/cloud-upload";
+import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
+import Hash from "lucide-react/dist/esm/icons/hash";
+import Info from "lucide-react/dist/esm/icons/info";
+import SquareTerminal from "lucide-react/dist/esm/icons/square-terminal";
 
 type WorktreeBaseRefOption = {
   name: string;

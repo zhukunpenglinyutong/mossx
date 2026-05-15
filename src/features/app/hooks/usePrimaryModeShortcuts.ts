@@ -3,6 +3,7 @@ import {
   isEditableShortcutTarget,
   matchesShortcutForPlatform,
 } from "../../../utils/shortcuts";
+import { registerKeydownHandler } from "./keyboardDispatcher";
 
 type UsePrimaryModeShortcutsOptions = {
   isEnabled: boolean;
@@ -53,7 +54,6 @@ export function usePrimaryModeShortcuts({
       onOpenKanban();
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return registerKeydownHandler(handleKeyDown);
   }, [isEnabled, onOpenChat, onOpenKanban, openChatShortcut, openKanbanShortcut]);
 }

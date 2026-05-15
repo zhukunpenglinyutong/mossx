@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderOpen } from "lucide-react";
+import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
 import type { WorkspaceInfo } from "../../../types";
 
 type ProjectCardProps = {

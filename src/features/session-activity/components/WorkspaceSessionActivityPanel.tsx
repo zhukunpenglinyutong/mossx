@@ -1413,11 +1413,12 @@ export function WorkspaceSessionActivityPanel({
     };
 
     updateFollowBubbleGeometry();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", updateFollowBubbleGeometry);
-    window.addEventListener("scroll", updateFollowBubbleGeometry, true);
+    window.addEventListener("scroll", updateFollowBubbleGeometry, scrollOptions);
     return () => {
       window.removeEventListener("resize", updateFollowBubbleGeometry);
-      window.removeEventListener("scroll", updateFollowBubbleGeometry, true);
+      window.removeEventListener("scroll", updateFollowBubbleGeometry, scrollOptions);
     };
   }, [
     followInlineCopyText,

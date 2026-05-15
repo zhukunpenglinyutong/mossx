@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import Plus from "lucide-react/dist/esm/icons/plus";
 import type { AppMode, WorkspaceInfo } from "../../../types";
 import type { KanbanTask } from "../types";
 import { ProjectCard } from "./ProjectCard";

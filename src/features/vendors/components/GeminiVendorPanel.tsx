@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Cloud, KeyRound, LogIn, Settings2 } from "lucide-react";
+import Cloud from "lucide-react/dist/esm/icons/cloud";
+import KeyRound from "lucide-react/dist/esm/icons/key-round";
+import LogIn from "lucide-react/dist/esm/icons/log-in";
+import Settings2 from "lucide-react/dist/esm/icons/settings-2";
 import type { ComponentType } from "react";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import EyeOff from "lucide-react/dist/esm/icons/eye-off";

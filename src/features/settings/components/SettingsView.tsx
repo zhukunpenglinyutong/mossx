@@ -16,18 +16,16 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  Globe,
-  Monitor,
-  Cog,
-  Keyboard,
-  ExternalLink,
-  Mail,
-  Archive,
-  NotebookPen,
-  Boxes,
-  Bot,
-} from "lucide-react";
+import Globe from "lucide-react/dist/esm/icons/globe";
+import Monitor from "lucide-react/dist/esm/icons/monitor";
+import Cog from "lucide-react/dist/esm/icons/cog";
+import Keyboard from "lucide-react/dist/esm/icons/keyboard";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Mail from "lucide-react/dist/esm/icons/mail";
+import Archive from "lucide-react/dist/esm/icons/archive";
+import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
+import Boxes from "lucide-react/dist/esm/icons/boxes";
+import Bot from "lucide-react/dist/esm/icons/bot";
 import type {
   AppSettings,
   CodexDoctorResult,

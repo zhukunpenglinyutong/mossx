@@ -1,5 +1,8 @@
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Search, CornerUpLeft, PanelRight } from "lucide-react";
+import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
+import Search from "lucide-react/dist/esm/icons/search";
+import CornerUpLeft from "lucide-react/dist/esm/icons/corner-up-left";
+import PanelRight from "lucide-react/dist/esm/icons/panel-right";
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { AppMode, WorkspaceInfo } from "../../../types";
 import type { KanbanPanel } from "../types";

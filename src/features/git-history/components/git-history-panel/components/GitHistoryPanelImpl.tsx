@@ -1293,12 +1293,13 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
         setCommitContextMenu(null);
       }
     };
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("scroll", handleScroll, scrollOptions);
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("scroll", handleScroll, scrollOptions);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [commitContextMenu]);
@@ -2160,11 +2161,12 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     }
     const handleLayoutChange = () => updatePullTargetBranchMenuPlacement();
     handleLayoutChange();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", handleLayoutChange);
-    window.addEventListener("scroll", handleLayoutChange, true);
+    window.addEventListener("scroll", handleLayoutChange, scrollOptions);
     return () => {
       window.removeEventListener("resize", handleLayoutChange);
-      window.removeEventListener("scroll", handleLayoutChange, true);
+      window.removeEventListener("scroll", handleLayoutChange, scrollOptions);
     };
   }, [pullDialogOpen, pullTargetBranchMenuOpen, updatePullTargetBranchMenuPlacement]);
 
@@ -2181,11 +2183,12 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     }
     const handleLayoutChange = () => updatePullRemoteMenuPlacement();
     handleLayoutChange();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", handleLayoutChange);
-    window.addEventListener("scroll", handleLayoutChange, true);
+    window.addEventListener("scroll", handleLayoutChange, scrollOptions);
     return () => {
       window.removeEventListener("resize", handleLayoutChange);
-      window.removeEventListener("scroll", handleLayoutChange, true);
+      window.removeEventListener("scroll", handleLayoutChange, scrollOptions);
     };
   }, [pullDialogOpen, pullRemoteMenuOpen, updatePullRemoteMenuPlacement]);
 
@@ -2245,11 +2248,12 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     }
     const handleLayoutChange = () => updatePushTargetBranchMenuPlacement();
     handleLayoutChange();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", handleLayoutChange);
-    window.addEventListener("scroll", handleLayoutChange, true);
+    window.addEventListener("scroll", handleLayoutChange, scrollOptions);
     return () => {
       window.removeEventListener("resize", handleLayoutChange);
-      window.removeEventListener("scroll", handleLayoutChange, true);
+      window.removeEventListener("scroll", handleLayoutChange, scrollOptions);
     };
   }, [pushDialogOpen, pushTargetBranchMenuOpen, updatePushTargetBranchMenuPlacement]);
 
@@ -2266,11 +2270,12 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     }
     const handleLayoutChange = () => updatePushRemoteMenuPlacement();
     handleLayoutChange();
+    const scrollOptions = { capture: true, passive: true } as const;
     window.addEventListener("resize", handleLayoutChange);
-    window.addEventListener("scroll", handleLayoutChange, true);
+    window.addEventListener("scroll", handleLayoutChange, scrollOptions);
     return () => {
       window.removeEventListener("resize", handleLayoutChange);
-      window.removeEventListener("scroll", handleLayoutChange, true);
+      window.removeEventListener("scroll", handleLayoutChange, scrollOptions);
     };
   }, [pushDialogOpen, pushRemoteMenuOpen, updatePushRemoteMenuPlacement]);
 

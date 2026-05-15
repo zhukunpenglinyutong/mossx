@@ -22,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { RendererContextMenu } from "../../../components/ui/RendererContextMenu";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useExitedSessionVisibility } from "../hooks/useExitedSessionVisibility";
+import { registerKeydownHandler } from "../hooks/keyboardDispatcher";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
@@ -533,7 +534,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { t } = useTranslation();
   const quickSearchLabel = t("sidebar.quickSearch");
-  const isMac = useMemo(() => isMacPlatform(), []);
+  const isMac = isMacPlatform();
   const quickChatShortcutLabel = useMemo(
     () => formatShortcutForPlatform(openChatShortcut, isMac),
     [isMac, openChatShortcut],
@@ -547,29 +548,29 @@ export function Sidebar({
     [globalSearchShortcut, isMac],
   );
 
-  const [expandedWorkspaces, setExpandedWorkspaces] = useState(
-    new Set<string>(),
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(
+    () => new Set(),
   );
-  const [collapsedWorktreeSections, setCollapsedWorktreeSections] = useState(
-    new Set<string>(),
+  const [collapsedWorktreeSections, setCollapsedWorktreeSections] = useState<Set<string>>(
+    () => new Set(),
   );
   const [sessionFoldersByWorkspaceId, setSessionFoldersByWorkspaceId] = useState<
     Record<string, WorkspaceSessionFolder[]>
-  >({});
+  >(() => ({}));
   const loadedSessionFolderWorkspaceIdsRef = useRef<Set<string>>(new Set());
   const [sessionFolderErrorByWorkspaceId, setSessionFolderErrorByWorkspaceId] = useState<
     Record<string, string>
-  >({});
+  >(() => ({}));
   const [sessionFolderOverrideByWorkspaceId, setSessionFolderOverrideByWorkspaceId] = useState<
     Record<string, Record<string, string | null>>
-  >({});
+  >(() => ({}));
   const [
     pendingSessionFolderIntentByWorkspaceId,
     setPendingSessionFolderIntentByWorkspaceId,
-  ] = useState<Record<string, Record<string, string>>>({});
+  ] = useState<Record<string, Record<string, string>>>(() => ({}));
   const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] = useState<
     Record<string, number>
-  >({});
+  >(() => ({}));
   const [collapsedSessionFolderIdsByWorkspaceId, setCollapsedSessionFolderIdsByWorkspaceId] = useState<
     Record<string, string[]>
   >(() => readPersistedCollapsedSessionFolderIds());
@@ -859,10 +860,7 @@ export function Sidebar({
         closeWorkspaceMenu();
       }
     };
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
+    return registerKeydownHandler(handleWindowKeyDown);
   }, [workspaceMenuState, closeWorkspaceMenu]);
 
   const renderWorkspaceMenuIcon = useCallback((iconKind: string) => {
@@ -1011,12 +1009,12 @@ export function Sidebar({
     pinnedThreadsVersion,
   ]);
 
-  const scrollFadeDeps = useMemo(
-    () => [groupedWorkspaces, threadsByWorkspace, expandedWorkspaces, normalizedQuery],
-    [groupedWorkspaces, threadsByWorkspace, expandedWorkspaces, normalizedQuery],
+  const { sidebarBodyRef, scrollFade, updateScrollFade } = useSidebarScrollFade(
+    groupedWorkspaces,
+    threadsByWorkspace,
+    expandedWorkspaces,
+    normalizedQuery,
   );
-  const { sidebarBodyRef, scrollFade, updateScrollFade } =
-    useSidebarScrollFade(scrollFadeDeps);
 
   const filteredGroupedWorkspaces = useMemo(
     () =>
@@ -1473,10 +1471,7 @@ export function Sidebar({
         closeFolderMovePicker();
       }
     };
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
+    return registerKeydownHandler(handleWindowKeyDown);
   }, [closeFolderMovePicker, folderMovePicker]);
 
   const handleCreateSessionFolder = useCallback(

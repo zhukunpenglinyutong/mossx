@@ -2007,7 +2007,7 @@ export function GitDiffPanel({
           <span className="git-root-path" title={activeRootPathDisplay}>
             {activeRootPathDisplay}
           </span>
-          {rootAlertText && <span className="git-root-inline-alert">{rootAlertText}</span>}
+          {rootAlertText ? <span className="git-root-inline-alert">{rootAlertText}</span> : null}
           {onScanGitRoots && (
             <button
               type="button"
@@ -2026,7 +2026,7 @@ export function GitDiffPanel({
       {mode === "diff" ? (
         <>
           {!useUnifiedDiffSummary && !rootAlertText ? <div className="diff-status">{diffStatusNode}</div> : null}
-          {worktreeApplyError && <div className="diff-error">{worktreeApplyError}</div>}
+          {worktreeApplyError ? <div className="diff-error">{worktreeApplyError}</div> : null}
         </>
       ) : mode === "log" ? (
         <>
@@ -2045,7 +2045,7 @@ export function GitDiffPanel({
         <>
           <div className="diff-status diff-status-issues">
             <span>{t("git.githubIssues")}</span>
-            {issuesLoading && <span className="git-panel-spinner" aria-hidden />}
+            {issuesLoading ? <span className="git-panel-spinner" aria-hidden /> : null}
           </div>
           <div className="git-log-sync">
             <span>{issuesTotal} {t("git.open")}</span>

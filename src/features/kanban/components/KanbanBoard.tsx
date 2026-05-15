@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState, type ReactNode, type MouseEvent } from 
 import { useTranslation } from "react-i18next";
 import { DragDropContext } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
-import { Terminal, X } from "lucide-react";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
+import X from "lucide-react/dist/esm/icons/x";
 import type { AppMode, EngineStatus, EngineType, WorkspaceInfo } from "../../../types";
 import type {
   KanbanTaskChain,

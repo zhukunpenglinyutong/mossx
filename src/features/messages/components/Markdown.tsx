@@ -5,9 +5,7 @@ import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
-import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import katex from "katex";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { LocalImage } from "./LocalImage";
@@ -21,7 +19,53 @@ import {
   resolveProgressiveRevealValue,
   type LightweightMarkdownLinkRenderer,
 } from "./LiveMarkdown";
-import "katex/dist/katex.min.css";
+
+type KatexModule = typeof import("katex")["default"];
+type RehypeKatexPlugin = typeof import("rehype-katex")["default"];
+
+let cachedKatex: KatexModule | null = null;
+let cachedRehypeKatex: RehypeKatexPlugin | null = null;
+let katexCssLoaded = false;
+let katexLoadingPromise: Promise<void> | null = null;
+
+function loadKatexAssets(): Promise<void> {
+  if (cachedKatex && cachedRehypeKatex && katexCssLoaded) {
+    return Promise.resolve();
+  }
+  if (katexLoadingPromise) {
+    return katexLoadingPromise;
+  }
+  katexLoadingPromise = Promise.all([
+    import("katex").then((m) => {
+      cachedKatex = m.default;
+    }),
+    import("rehype-katex").then((m) => {
+      cachedRehypeKatex = m.default;
+    }),
+    import("katex/dist/katex.min.css").then(() => {
+      katexCssLoaded = true;
+    }),
+  ]).then(() => undefined);
+  return katexLoadingPromise;
+}
+
+export function prewarmKatexAssets(): Promise<void> {
+  return loadKatexAssets();
+}
+
+const INLINE_DOLLAR_MATH = /(^|[^\\$])\$[^\n$]+?\$/;
+const BLOCK_DOLLAR_MATH = /\$\$[\s\S]+?\$\$/;
+const LATEX_PAREN_MATH = /\\\(|\\\[/;
+const LATEX_CODE_FENCE = /```\s*(?:latex|tex|math)\b/i;
+
+function detectMathContent(value: string | undefined | null): boolean {
+  if (!value) return false;
+  if (LATEX_CODE_FENCE.test(value)) return true;
+  if (BLOCK_DOLLAR_MATH.test(value)) return true;
+  if (INLINE_DOLLAR_MATH.test(value)) return true;
+  if (LATEX_PAREN_MATH.test(value)) return true;
+  return false;
+}
 
 const MermaidBlock = lazy(() => import("./MermaidBlock"));
 import {
@@ -329,6 +373,20 @@ function normalizeInlineOrderedListBreaks(value: string) {
   );
 }
 
+const REGEXP_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g;
+const blockquoteContinuationCache = new Map<string, RegExp>();
+
+function getBlockquoteContinuationRegex(quotePrefix: string): RegExp {
+  const cached = blockquoteContinuationCache.get(quotePrefix);
+  if (cached) {
+    return cached;
+  }
+  const escapedPrefix = quotePrefix.replace(REGEXP_SPECIAL_CHARS, "\\$&");
+  const created = new RegExp(`^${escapedPrefix}(?:\\s+\\S|\\s*$)`);
+  blockquoteContinuationCache.set(quotePrefix, created);
+  return created;
+}
+
 function normalizeGithubBlockquoteAlerts(value: string) {
   if (!value.includes("[!")) {
     return value;
@@ -361,7 +419,7 @@ function normalizeGithubBlockquoteAlerts(value: string) {
     if (
       nextLine &&
       !/^\s*>+\s*$/.test(nextLine) &&
-      new RegExp(`^${quotePrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+\\S|\\s*$)`).test(nextLine)
+      getBlockquoteContinuationRegex(quotePrefix).test(nextLine)
     ) {
       normalized.push(quotePrefix);
     }
@@ -1399,8 +1457,9 @@ function unwrapLatexDelimiters(source: string) {
 }
 
 function renderLatexFormula(source: string) {
+  if (!cachedKatex) return null;
   try {
-    const renderedHtml = katex.renderToString(unwrapLatexDelimiters(source), {
+    const renderedHtml = cachedKatex.renderToString(unwrapLatexDelimiters(source), {
       displayMode: true,
       throwOnError: false,
       strict: "ignore",
@@ -1611,13 +1670,27 @@ function LatexBlock({ className, value, copyUseModifier }: CodeBlockProps) {
     () => buildLatexRenderEntries(value),
     [value],
   );
+  const [katexReady, setKatexReady] = useState(
+    () => cachedKatex !== null && katexCssLoaded,
+  );
+  useEffect(() => {
+    if (katexReady) return;
+    let cancelled = false;
+    loadKatexAssets().then(() => {
+      if (cancelled) return;
+      startTransition(() => setKatexReady(true));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [katexReady]);
   const renderedEntries = useMemo(
     () => entries.map((entry) => (
       entry.kind === "label"
         ? { ...entry }
-        : { ...entry, html: renderLatexFormula(entry.source) }
+        : { ...entry, html: katexReady ? renderLatexFormula(entry.source) : null }
     )),
-    [entries],
+    [entries, katexReady],
   );
   const hasFormulaRenderFailure = renderedEntries.some(
     (entry) => entry.kind === "formula" && !entry.html,
@@ -2292,25 +2365,45 @@ export const Markdown = memo(function Markdown({
     },
     [softBreaks],
   );
+  const hasMathContent = useMemo(() => detectMathContent(value), [value]);
+  const [katexReady, setKatexReady] = useState(
+    () => cachedKatex !== null && cachedRehypeKatex !== null && katexCssLoaded,
+  );
+  useEffect(() => {
+    if (!hasMathContent || katexReady) return;
+    let cancelled = false;
+    loadKatexAssets().then(() => {
+      if (cancelled) return;
+      startTransition(() => setKatexReady(true));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasMathContent, katexReady]);
   const rehypePluginsMemo = useMemo(
-    () => [
-      rehypeRaw,
-      [rehypeSanitize, {
-        ...defaultSchema,
-        tagNames: [
-          ...(defaultSchema.tagNames ?? []),
-          "details", "summary", "abbr", "mark", "ins", "del",
-          "sub", "sup", "kbd", "var", "samp",
-        ],
-        attributes: {
-          ...defaultSchema.attributes,
-          "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "class", "style"],
-          "img": [...(defaultSchema.attributes?.["img"] ?? []), "loading"],
-        },
-      }],
-      rehypeKatex,
-    ] as Parameters<typeof ReactMarkdown>[0]["rehypePlugins"],
-    [],
+    () => {
+      const plugins: unknown[] = [
+        rehypeRaw,
+        [rehypeSanitize, {
+          ...defaultSchema,
+          tagNames: [
+            ...(defaultSchema.tagNames ?? []),
+            "details", "summary", "abbr", "mark", "ins", "del",
+            "sub", "sup", "kbd", "var", "samp",
+          ],
+          attributes: {
+            ...defaultSchema.attributes,
+            "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "class", "style"],
+            "img": [...(defaultSchema.attributes?.["img"] ?? []), "loading"],
+          },
+        }],
+      ];
+      if (katexReady && cachedRehypeKatex) {
+        plugins.push(cachedRehypeKatex);
+      }
+      return plugins as Parameters<typeof ReactMarkdown>[0]["rehypePlugins"];
+    },
+    [katexReady],
   );
   const urlTransform = useCallback((url: string) => {
     const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url);

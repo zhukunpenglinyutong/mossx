@@ -117,7 +117,7 @@ export function LaunchScriptButton({
             rows={6}
             data-tauri-drag-region="false"
           />
-          {error && <div className="launch-script-error">{error}</div>}
+          {error ? <div className="launch-script-error">{error}</div> : null}
           <div className="launch-script-actions">
             <button
               type="button"
@@ -173,7 +173,7 @@ export function LaunchScriptButton({
                 rows={5}
                 data-tauri-drag-region="false"
               />
-              {newError && <div className="launch-script-error">{newError}</div>}
+              {newError ? <div className="launch-script-error">{newError}</div> : null}
               <div className="launch-script-actions">
                 <button
                   type="button"

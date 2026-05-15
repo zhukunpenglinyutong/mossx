@@ -8,7 +8,11 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Droppable } from "@hello-pangea/dnd";
-import { Check, ChevronDown, ChevronRight, CircleAlert, Plus } from "lucide-react";
+import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import CircleAlert from "lucide-react/dist/esm/icons/circle-alert";
+import Plus from "lucide-react/dist/esm/icons/plus";
 import type { KanbanColumnDef, KanbanTask, KanbanTaskStatus } from "../types";
 import { KanbanCard } from "./KanbanCard";
 

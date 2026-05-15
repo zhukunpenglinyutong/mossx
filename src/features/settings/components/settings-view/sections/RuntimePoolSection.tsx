@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Activity,
-  BadgeCheck,
-  Clock3,
-  Flame,
-  Pin,
-  RefreshCw,
-  Snowflake,
-  Sparkles,
-  SquareTerminal,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
+import Activity from "lucide-react/dist/esm/icons/activity";
+import BadgeCheck from "lucide-react/dist/esm/icons/badge-check";
+import Clock3 from "lucide-react/dist/esm/icons/clock-3";
+import Flame from "lucide-react/dist/esm/icons/flame";
+import Pin from "lucide-react/dist/esm/icons/pin";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Snowflake from "lucide-react/dist/esm/icons/snowflake";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import SquareTerminal from "lucide-react/dist/esm/icons/square-terminal";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
 import type { AppSettings, RuntimePoolSnapshot, WorkspaceInfo } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

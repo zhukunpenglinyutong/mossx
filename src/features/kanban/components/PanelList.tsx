@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Plus } from "lucide-react";
+import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
+import Plus from "lucide-react/dist/esm/icons/plus";
 import type { AppMode, WorkspaceInfo } from "../../../types";
 import type { KanbanPanel, KanbanTask } from "../types";
 import { PanelCard } from "./PanelCard";

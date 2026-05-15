@@ -5,7 +5,7 @@ type ScrollFadeState = {
   bottom: boolean;
 };
 
-export function useSidebarScrollFade(deps: ReadonlyArray<unknown>) {
+export function useSidebarScrollFade(...deps: ReadonlyArray<unknown>) {
   const sidebarBodyRef = useRef<HTMLDivElement | null>(null);
   const [scrollFade, setScrollFade] = useState<ScrollFadeState>({
     top: false,
@@ -31,7 +31,8 @@ export function useSidebarScrollFade(deps: ReadonlyArray<unknown>) {
   useEffect(() => {
     const frame = requestAnimationFrame(updateScrollFade);
     return () => cancelAnimationFrame(frame);
-  }, [updateScrollFade, deps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateScrollFade, ...deps]);
 
   return { sidebarBodyRef, scrollFade, updateScrollFade };
 }

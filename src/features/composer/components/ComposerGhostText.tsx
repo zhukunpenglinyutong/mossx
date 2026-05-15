@@ -38,7 +38,7 @@ export function ComposerGhostText({
     };
 
     syncScroll();
-    textarea.addEventListener("scroll", syncScroll);
+    textarea.addEventListener("scroll", syncScroll, { passive: true });
     return () => textarea.removeEventListener("scroll", syncScroll);
   }, [textareaRef]);
 

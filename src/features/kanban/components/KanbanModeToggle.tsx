@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { MessageSquare, LayoutGrid } from "lucide-react";
+import MessageSquare from "lucide-react/dist/esm/icons/message-square";
+import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import type { AppMode } from "../../../types";
 
 type KanbanModeToggleProps = {
