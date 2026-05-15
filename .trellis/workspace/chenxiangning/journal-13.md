@@ -1535,3 +1535,48 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 470: 标记成熟流式输出重构契约
+
+**Date**: 2026-05-15
+**Task**: 标记成熟流式输出重构契约
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+沉淀 Codex 与 Claude Code mature streaming guardrails，防止后续重构破坏 stream hot path。
+
+### Main Changes
+
+## 本次工作
+
+- 将 Codex / Claude Code live streaming 标记为成熟保护契约。
+- 更新 Claude Code first-token latency spec，明确 first-token/startup、backend forwarder、frontend render、terminal settlement 的 phase ownership。
+- 更新 Claude Code stream forwarding latency spec，要求 TextDelta / ReasoningDelta / ToolOutputDelta 继续走 protected hot path，diagnostics、ledger、process snapshot、history reconcile 不得阻塞 delta。
+- 更新 Codex conversation liveness spec，明确 suspected-silent 非终态、非文本 runtime activity 仍是 progress evidence、history reconcile 不是 live convergence 唯一路径。
+- 更新 Trellis frontend Messages Streaming Render Contract，给未来重构 Messages / Timeline / Markdown / LiveMarkdown 时的 guardrail。
+
+## 验证
+
+- openspec validate --all --strict --no-interactive：258 passed, 0 failed。
+- git diff 范围确认仅包含 4 个规范文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `66a400a2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

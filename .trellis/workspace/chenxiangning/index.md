@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 469
+- **Total Sessions**: 470
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~1537 | Active |
+| `journal-13.md` | ~1582 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 470 | 2026-05-15 | 标记成熟流式输出重构契约 | `66a400a2` | `feature/v0.4.18` |
 | 469 | 2026-05-15 | 归档已验证 OpenSpec 提案 | `41cf2e8d` | `feature/v0.4.18` |
 | 468 | 2026-05-15 | 修复提示词增强重复结果 | `2810476b` | `feature/v0.4.18` |
 | 467 | 2026-05-15 | 增强 Prompt Enhancer Claude 失败诊断与兜底 | `541f9058` | `feature/v0.4.18` |
