@@ -193,7 +193,7 @@
 
 ---
 
-### - [ ] P1-5. Messages 缺少 `useDeferredValue` / `useTransition`
+### - [x] P1-5. Messages 缺少 `useDeferredValue` / `useTransition`
 
 - **文件**：`src/features/messages/components/Messages.tsx:509` 及上下游
 - **规则**：`rerender-use-deferred-value`、`rerender-transitions`
@@ -385,7 +385,7 @@
 - [x] P1-2 lucide-react 导入统一（搭配 eslint-plugin no-restricted-imports）
 - [x] P1-3 危险 `&&` 渲染重构（优先涉及 number/string 的）
 - [x] P1-4 键盘事件统一调度
-- [ ] P1-5 Messages 添加 useDeferredValue
+- [x] P1-5 Messages 添加 useDeferredValue
 
 ### 第三周（10 小时 - 长尾优化）
 

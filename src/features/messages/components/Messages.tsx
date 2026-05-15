@@ -1,13 +1,13 @@
 import {
   memo,
-  startTransition,
-  useDeferredValue,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -490,6 +490,7 @@ export const Messages = memo(function Messages({
   // Throttle scrollKey during streaming to avoid flooding the main thread
   // with smooth-scroll animations that block keyboard input.
   const [scrollKey, setScrollKey] = useState(rawScrollKey);
+  const [, startScrollKeyTransition] = useTransition();
   const scrollThrottleRef = useRef<number>(0);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -506,7 +507,7 @@ export const Messages = memo(function Messages({
       if (!mountedRef.current || typeof window === "undefined") {
         return;
       }
-      startTransition(() => {
+      startScrollKeyTransition(() => {
         setScrollKey(rawScrollKey);
       });
     }, isThinking ? 120 : 0);
@@ -515,7 +516,7 @@ export const Messages = memo(function Messages({
         window.clearTimeout(scrollThrottleRef.current);
       }
     };
-  }, [rawScrollKey, isThinking]);
+  }, [rawScrollKey, isThinking, startScrollKeyTransition]);
   const { openFileLink, showFileLinkMenu, fileLinkMenu, closeFileLinkMenu } = useFileLinkOpener(
     workspacePath,
     openTargets,
