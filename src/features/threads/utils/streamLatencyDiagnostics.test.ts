@@ -23,6 +23,8 @@ vi.mock("../../../utils/platform", () => ({
 import {
   completeThreadStreamTurn,
   getThreadStreamLatencySnapshot,
+  isStreamLatencyTraceEnabled,
+  noteThreadAppServerEventReceived,
   noteThreadDeltaReceived,
   noteThreadTextIngressReceived,
   noteThreadTurnStarted,
@@ -1016,5 +1018,167 @@ describe("streamLatencyDiagnostics", () => {
       providerName: null,
       baseUrl: null,
     });
+  });
+
+  it("records app-server stream timing only when the debug trace flag is enabled", async () => {
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        itemId: "assistant-trace",
+        delta: "secret text must not be logged",
+        ccguiTiming: {
+          source: "claude-stream",
+          stdoutReceivedAtMs: 1_000,
+          sessionEmittedAtMs: 1_020,
+          forwarderReceivedAtMs: 1_030,
+          appServerEmittedAtMs: 1_040,
+          stdoutToSessionEmitMs: 20,
+          sessionEmitToForwarderMs: 10,
+          forwarderToAppServerEmitMs: 10,
+          stdoutToAppServerEmitMs: 40,
+        },
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(mocks.appendRendererDiagnostic).not.toHaveBeenCalled();
+
+    const getItem = vi.fn((key: string) =>
+      key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+    );
+    vi.stubGlobal("window", {
+      localStorage: { getItem },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    expect(isStreamLatencyTraceEnabled()).toBe(true);
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        itemId: "assistant-trace",
+        delta: "secret text must not be logged",
+        ccguiTiming: {
+          source: "claude-stream",
+          stdoutReceivedAtMs: 1_000,
+          sessionEmittedAtMs: 1_020,
+          forwarderReceivedAtMs: 1_030,
+          appServerEmittedAtMs: 1_040,
+          stdoutToSessionEmitMs: 20,
+          sessionEmitToForwarderMs: 10,
+          forwarderToAppServerEmitMs: 10,
+          stdoutToAppServerEmitMs: 40,
+        },
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/app-server-event",
+      expect.objectContaining({
+        method: "item/agentMessage/delta",
+        itemId: "assistant-trace",
+        deltaLength: 30,
+        stdoutToSessionEmitMs: 20,
+        stdoutToAppServerEmitMs: 40,
+        appServerEmitToRendererMs: 50,
+        stdoutToRendererMs: 90,
+      }),
+    );
+    const payload = mocks.appendRendererDiagnostic.mock.calls.at(-1)?.[1] as Record<
+      string,
+      unknown
+    >;
+    expect(JSON.stringify(payload)).not.toContain("secret text");
+  });
+
+  it("ignores malformed app-server latency trace params", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: vi.fn((key: string) =>
+          key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+        ),
+      },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: null,
+      receivedAt: 1_090,
+    });
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: "not-an-object",
+      receivedAt: 1_090,
+    });
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        ccguiTiming: "not-an-object",
+      },
+      receivedAt: 1_090,
+    });
+
+    expect(mocks.appendRendererDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it("normalizes invalid app-server latency trace numbers without negative gaps", () => {
+    vi.spyOn(Date, "now").mockReturnValue(2_000);
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: vi.fn((key: string) =>
+          key === "ccgui.debug.streamLatencyTrace" ? "1" : null,
+        ),
+      },
+    });
+    resetThreadStreamLatencyDiagnosticsForTests();
+
+    noteThreadAppServerEventReceived({
+      workspaceId: "ws-1",
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "thread-trace",
+        itemId: "assistant-trace",
+        delta: "visible delta",
+        ccguiTiming: {
+          source: "claude-stream",
+          stdoutReceivedAtMs: -1,
+          sessionEmittedAtMs: Number.POSITIVE_INFINITY,
+          forwarderReceivedAtMs: Number.NaN,
+          appServerEmittedAtMs: 3_000,
+          stdoutToSessionEmitMs: -20,
+          sessionEmitToForwarderMs: Number.NaN,
+          forwarderToAppServerEmitMs: Number.POSITIVE_INFINITY,
+          stdoutToAppServerEmitMs: "40",
+        },
+      },
+      receivedAt: "bad-clock",
+    });
+
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/app-server-event",
+      expect.objectContaining({
+        stdoutReceivedAtMs: null,
+        sessionEmittedAtMs: null,
+        forwarderReceivedAtMs: null,
+        appServerEmittedAtMs: 3_000,
+        rendererReceivedAtMs: 2_000,
+        stdoutToSessionEmitMs: null,
+        sessionEmitToForwarderMs: null,
+        forwarderToAppServerEmitMs: null,
+        stdoutToAppServerEmitMs: null,
+        appServerEmitToRendererMs: 0,
+        stdoutToRendererMs: null,
+      }),
+    );
   });
 });

@@ -1307,8 +1307,10 @@ pub async fn engine_send_message(
                     let is_turn_completed =
                         matches!(turn_event.event, EngineEvent::TurnCompleted { .. });
                     let event = turn_event.event;
+                    let stream_timing = turn_event.stream_timing;
                     let did_finish = handle_claude_forwarder_event(
                         event,
+                        stream_timing.as_ref(),
                         &mut forwarder_state,
                         &runtime_context,
                         &mut |payload| {

@@ -25,6 +25,7 @@ import {
   resolveSharedSessionBindingByNativeThread,
 } from "../../shared-session/runtime/sharedSessionBridge";
 import { updateSharedSessionNativeBinding as updateSharedSessionNativeBindingService } from "../../shared-session/services/sharedSessions";
+import { noteThreadAppServerEventReceived } from "../../threads/utils/streamLatencyDiagnostics";
 
 type AgentDelta = {
   workspaceId: string;
@@ -1194,6 +1195,11 @@ export function useAppServerEvents(
       }
 
       const params = (message.params as Record<string, unknown>) ?? {};
+      noteThreadAppServerEventReceived({
+        workspaceId: workspace_id,
+        method,
+        params,
+      });
       const rawThreadId = extractThreadIdFromParams(params);
       const rawMethodEngine = inferRawMethodEngine(method);
       const shouldForceNormalizedRealtimeRoute = isCodexRawGeneratedImageEvent(

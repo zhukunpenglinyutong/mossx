@@ -10,7 +10,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
@@ -58,6 +58,13 @@ use stream_helpers::{
 pub struct ClaudeTurnEvent {
     pub turn_id: String,
     pub event: EngineEvent,
+    pub stream_timing: Option<ClaudeStreamTiming>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClaudeStreamTiming {
+    pub(crate) stdout_received_at_ms: Option<u64>,
+    pub(crate) session_emitted_at_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -88,15 +95,24 @@ const CLAUDE_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "m
 struct BufferedClaudeTextDelta {
     text: String,
     started_at: Option<Instant>,
+    first_stdout_received_at_ms: Option<u64>,
 }
 
 impl BufferedClaudeTextDelta {
+    #[cfg(test)]
     fn push(&mut self, delta: &str) {
+        self.push_with_timing(delta, None);
+    }
+
+    fn push_with_timing(&mut self, delta: &str, stdout_received_at_ms: Option<u64>) {
         if delta.is_empty() {
             return;
         }
         if self.started_at.is_none() {
             self.started_at = Some(Instant::now());
+        }
+        if self.first_stdout_received_at_ms.is_none() {
+            self.first_stdout_received_at_ms = stdout_received_at_ms;
         }
         self.text.push_str(delta);
     }
@@ -116,14 +132,36 @@ impl BufferedClaudeTextDelta {
         window.checked_sub(started_at.elapsed())
     }
 
+    #[cfg(test)]
     fn take(&mut self) -> Option<String> {
+        self.take_with_timing().map(|emission| emission.text)
+    }
+
+    fn take_with_timing(&mut self) -> Option<BufferedClaudeTextDeltaEmission> {
         if self.text.is_empty() {
             self.started_at = None;
+            self.first_stdout_received_at_ms = None;
             return None;
         }
         self.started_at = None;
-        Some(std::mem::take(&mut self.text))
+        Some(BufferedClaudeTextDeltaEmission {
+            text: std::mem::take(&mut self.text),
+            stdout_received_at_ms: self.first_stdout_received_at_ms.take(),
+        })
     }
+}
+
+#[derive(Debug)]
+struct BufferedClaudeTextDeltaEmission {
+    text: String,
+    stdout_received_at_ms: Option<u64>,
+}
+
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
 }
 
 /// Claude Code session for a workspace
@@ -432,9 +470,19 @@ impl ClaudeSession {
     /// Emit a TurnError event to notify the frontend when an error occurs
     /// outside the normal send_message flow (e.g., spawn failure, early errors).
     fn emit_turn_event(&self, turn_id: &str, event: EngineEvent) {
+        self.emit_turn_event_with_stream_timing(turn_id, event, None);
+    }
+
+    fn emit_turn_event_with_stream_timing(
+        &self,
+        turn_id: &str,
+        event: EngineEvent,
+        stream_timing: Option<ClaudeStreamTiming>,
+    ) {
         let _ = self.event_sender.send(ClaudeTurnEvent {
             turn_id: turn_id.to_string(),
             event,
+            stream_timing,
         });
     }
 
@@ -443,15 +491,19 @@ impl ClaudeSession {
         turn_id: &str,
         pending_text_delta: &mut BufferedClaudeTextDelta,
     ) {
-        let Some(text) = pending_text_delta.take() else {
+        let Some(emission) = pending_text_delta.take_with_timing() else {
             return;
         };
-        self.emit_turn_event(
+        self.emit_turn_event_with_stream_timing(
             turn_id,
             EngineEvent::TextDelta {
                 workspace_id: self.workspace_id.clone(),
-                text,
+                text: emission.text,
             },
+            Some(ClaudeStreamTiming {
+                stdout_received_at_ms: emission.stdout_received_at_ms,
+                session_emitted_at_ms: unix_timestamp_ms(),
+            }),
         );
     }
 
@@ -984,6 +1036,7 @@ impl ClaudeSession {
             if line.trim().is_empty() {
                 continue;
             }
+            let line_received_at_ms = unix_timestamp_ms();
 
             match parse_claude_stream_json_line(&line) {
                 Ok(event) => {
@@ -1004,7 +1057,8 @@ impl ClaudeSession {
                                     if !text.trim().is_empty() {
                                         saw_text_delta = true;
                                         response_text.push_str(&text);
-                                        pending_text_delta.push(&text);
+                                        pending_text_delta
+                                            .push_with_timing(&text, Some(line_received_at_ms));
                                     }
                                 }
                             }
@@ -1052,7 +1106,7 @@ impl ClaudeSession {
                         if let EngineEvent::TextDelta { ref text, .. } = unified_event {
                             response_text.push_str(text);
                             saw_text_delta = true;
-                            pending_text_delta.push(text);
+                            pending_text_delta.push_with_timing(text, Some(line_received_at_ms));
                             continue;
                         }
 

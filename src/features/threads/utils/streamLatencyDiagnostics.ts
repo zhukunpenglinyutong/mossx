@@ -76,6 +76,7 @@ const VISIBLE_OUTPUT_STALL_THRESHOLD_MS = 700;
 const CODEX_INGRESS_GAP_DIAGNOSTIC_MS = 2_000;
 const LARGE_INGRESS_TEXT_DIAGNOSTIC_CHARS = 1_000;
 const STREAM_MITIGATION_DISABLE_FLAG_KEY = "ccgui.debug.streamMitigation.disabled";
+const STREAM_LATENCY_TRACE_FLAG_KEY = "ccgui.debug.streamLatencyTrace";
 
 const STREAM_MITIGATION_PROFILES: Readonly<Record<StreamMitigationProfileId, StreamMitigationProfile>> = {
   "claude-qwen-windows-render-safe": {
@@ -107,6 +108,7 @@ const snapshotByThread = new Map<string, ThreadStreamLatencySnapshot>();
 const latestProviderConfigRequestByThread = new Map<string, number>();
 const visibleOutputStallTimerByThread = new Map<string, ReturnType<typeof setTimeout>>();
 const snapshotListeners = new Set<() => void>();
+let streamLatencyTraceEnabledCache: boolean | null = null;
 
 type ObservableThreadStreamLatencySnapshotFields = Pick<
   ThreadStreamLatencySnapshot,
@@ -291,6 +293,46 @@ function isStreamMitigationDisabled() {
   } catch {
     return false;
   }
+}
+
+function readBooleanDebugFlag(key: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    const value = window.localStorage.getItem(key);
+    if (!value) {
+      return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function isStreamLatencyTraceEnabled() {
+  if (streamLatencyTraceEnabledCache === null) {
+    streamLatencyTraceEnabledCache = readBooleanDebugFlag(STREAM_LATENCY_TRACE_FLAG_KEY);
+  }
+  return streamLatencyTraceEnabledCache;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizeNonNegativeFiniteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
+
+function normalizeString(value: unknown) {
+  return typeof value === "string" ? value : "";
 }
 
 function clearVisibleOutputStallTimer(threadId: string) {
@@ -529,6 +571,92 @@ function buildCorrelationPayload(
     ...cadenceSummary,
     ...extra,
   };
+}
+
+function nonNegativeGapMs(later: number, earlier: number | null) {
+  return earlier === null ? null : Math.max(0, later - earlier);
+}
+
+function normalizeTimestampMs(value: unknown) {
+  return normalizeNonNegativeFiniteNumber(value) ?? Date.now();
+}
+
+function extractThreadIdFromAppServerParams(params: Record<string, unknown>) {
+  return normalizeNullableString(
+    normalizeString(params.threadId) ||
+      normalizeString(params.thread_id) ||
+      normalizeString(asRecord(params.turn)?.threadId) ||
+      normalizeString(asRecord(params.turn)?.thread_id),
+  );
+}
+
+function extractItemIdFromAppServerParams(params: Record<string, unknown>) {
+  const item = asRecord(params.item);
+  return normalizeNullableString(
+    normalizeString(params.itemId) ||
+      normalizeString(params.item_id) ||
+      normalizeString(item?.id),
+  );
+}
+
+export function noteThreadAppServerEventReceived(input: {
+  workspaceId: string;
+  method: string;
+  params: unknown;
+  receivedAt?: unknown;
+}) {
+  if (!isStreamLatencyTraceEnabled()) {
+    return;
+  }
+  const params = asRecord(input.params);
+  if (!params) {
+    return;
+  }
+  const timing = asRecord(params.ccguiTiming);
+  if (!timing) {
+    return;
+  }
+  const threadId = extractThreadIdFromAppServerParams(params);
+  if (!threadId) {
+    return;
+  }
+  const receivedAt = normalizeTimestampMs(input.receivedAt);
+  const stdoutReceivedAtMs = normalizeNonNegativeFiniteNumber(timing.stdoutReceivedAtMs);
+  const sessionEmittedAtMs = normalizeNonNegativeFiniteNumber(timing.sessionEmittedAtMs);
+  const forwarderReceivedAtMs = normalizeNonNegativeFiniteNumber(timing.forwarderReceivedAtMs);
+  const appServerEmittedAtMs = normalizeNonNegativeFiniteNumber(timing.appServerEmittedAtMs);
+  const snapshot =
+    snapshotByThread.get(threadId) ?? {
+      ...createInitialSnapshot(threadId),
+      workspaceId: input.workspaceId,
+      platform: resolvePlatform(),
+    };
+  appendRendererDiagnostic(
+    "stream-latency/app-server-event",
+    buildCorrelationPayload(snapshot, {
+      method: input.method,
+      itemId: extractItemIdFromAppServerParams(params),
+      deltaLength: normalizeString(params.delta).length,
+      traceSource: normalizeString(timing.source) || "unknown",
+      stdoutReceivedAtMs,
+      sessionEmittedAtMs,
+      forwarderReceivedAtMs,
+      appServerEmittedAtMs,
+      rendererReceivedAtMs: receivedAt,
+      stdoutToSessionEmitMs: normalizeNonNegativeFiniteNumber(timing.stdoutToSessionEmitMs),
+      sessionEmitToForwarderMs: normalizeNonNegativeFiniteNumber(
+        timing.sessionEmitToForwarderMs,
+      ),
+      forwarderToAppServerEmitMs: normalizeNonNegativeFiniteNumber(
+        timing.forwarderToAppServerEmitMs,
+      ),
+      stdoutToAppServerEmitMs: normalizeNonNegativeFiniteNumber(
+        timing.stdoutToAppServerEmitMs,
+      ),
+      appServerEmitToRendererMs: nonNegativeGapMs(receivedAt, appServerEmittedAtMs),
+      stdoutToRendererMs: nonNegativeGapMs(receivedAt, stdoutReceivedAtMs),
+    }),
+  );
 }
 
 export function buildThreadStreamCorrelationDimensions(threadId: string | null) {
@@ -1146,5 +1274,6 @@ export function resetThreadStreamLatencyDiagnosticsForTests() {
   visibleOutputStallTimerByThread.clear();
   snapshotByThread.clear();
   latestProviderConfigRequestByThread.clear();
+  streamLatencyTraceEnabledCache = null;
   notifySnapshotListeners();
 }
