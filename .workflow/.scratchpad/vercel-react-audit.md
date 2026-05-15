@@ -86,7 +86,7 @@
 
 ---
 
-### - [ ] P0-4. RegExp 在循环中重复创建
+### - [x] P0-4. RegExp 在循环中重复创建
 
 - **文件**：`src/features/messages/components/Markdown.tsx:364`
 - **规则**：`js-hoist-regexp`
@@ -375,7 +375,7 @@
 - [x] P0-1 scrollFadeDeps 反模式（Bug-fix 级别）
 - [x] P0-2 11 处 scroll passive
 - [x] P0-3 Katex 懒加载
-- [ ] P0-4 RegExp 缓存
+- [x] P0-4 RegExp 缓存
 - [ ] P2-1 Sidebar useState lazy init
 - [ ] P3-1 RichTextInput touch passive
 

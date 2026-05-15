@@ -373,6 +373,20 @@ function normalizeInlineOrderedListBreaks(value: string) {
   );
 }
 
+const REGEXP_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g;
+const blockquoteContinuationCache = new Map<string, RegExp>();
+
+function getBlockquoteContinuationRegex(quotePrefix: string): RegExp {
+  const cached = blockquoteContinuationCache.get(quotePrefix);
+  if (cached) {
+    return cached;
+  }
+  const escapedPrefix = quotePrefix.replace(REGEXP_SPECIAL_CHARS, "\\$&");
+  const created = new RegExp(`^${escapedPrefix}(?:\\s+\\S|\\s*$)`);
+  blockquoteContinuationCache.set(quotePrefix, created);
+  return created;
+}
+
 function normalizeGithubBlockquoteAlerts(value: string) {
   if (!value.includes("[!")) {
     return value;
@@ -405,7 +419,7 @@ function normalizeGithubBlockquoteAlerts(value: string) {
     if (
       nextLine &&
       !/^\s*>+\s*$/.test(nextLine) &&
-      new RegExp(`^${quotePrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+\\S|\\s*$)`).test(nextLine)
+      getBlockquoteContinuationRegex(quotePrefix).test(nextLine)
     ) {
       normalized.push(quotePrefix);
     }
