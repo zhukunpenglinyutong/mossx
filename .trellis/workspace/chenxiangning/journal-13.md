@@ -1756,3 +1756,49 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 475: 降低 Claude 上下文查询请求频率
+
+**Date**: 2026-05-16
+**Task**: 降低 Claude 上下文查询请求频率
+**Branch**: `feature/v0.5`
+
+### Summary
+
+将 Claude /context 背景查询降级为低频 fallback，减少短消息 count_tokens 请求爆发，并补充规范与测试。
+
+### Main Changes
+
+## Summary
+- 修复 Claude GUI runtime 在普通短消息后触发后台 /context 导致 count_tokens 请求爆发的问题。
+- GUI 启动 Claude CLI 和 /context 诊断命令均设置 CLAUDE_NON_INTERACTIVE=1，避免 SessionStart hook 注入交互启动上下文。
+- 将 post-turn /context 调整为低频 fallback：已有 live context_window 跳过、80 字以内无图短消息跳过、同 Claude session 120 秒冷却。
+- 新增过期 reservation 清理，避免 last_context_probe_by_session 长期运行无界增长。
+- 同步 OpenSpec 主规范和 Trellis backend contract。
+
+## Validation
+- cargo test --manifest-path src-tauri/Cargo.toml engine::claude::tests_core
+- cargo test --manifest-path src-tauri/Cargo.toml engine::claude::tests_context_usage
+- openspec validate --all --strict --no-interactive
+- rustfmt --edition 2021 --check src-tauri/src/engine/claude.rs src-tauri/src/engine/claude/lifecycle.rs src-tauri/src/engine/claude/tests_core.rs src-tauri/src/engine/claude/user_input.rs
+- git diff --check
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `742f4e75` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
