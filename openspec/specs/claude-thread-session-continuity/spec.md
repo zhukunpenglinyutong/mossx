@@ -29,6 +29,23 @@ TBD - synced from change fix-claude-thread-session-continuity. Update Purpose af
 - **AND** 系统 MUST NOT 将 `engine_send_message` 启动响应中的 provisional `sessionId` 当作 provider-native resume truth
 - **AND** 系统 SHOULD 进入可恢复的等待、重试或显式阻止发送状态
 
+#### Scenario: pending follow-up reconciles from validated candidate transcript
+
+- **WHEN** 用户在 `claude-pending-*` 首轮启动后发送后续消息
+- **AND** native `thread/started` confirmation 尚未成功配对到该 pending thread
+- **AND** `engine_send_message` response 提供了 candidate `sessionId`
+- **AND** 系统通过 `loadClaudeSession(candidateSessionId)` 读取到该 session 的 displayable assistant/tool/reasoning evidence
+- **THEN** 系统 MUST 将 `claude-pending-*` rebind 为 `claude:<candidateSessionId>`
+- **AND** 后续发送 MUST resume with `<candidateSessionId>`
+- **AND** 系统 MUST NOT 在 transcript 验证之前用该 candidate 构造 `--resume`
+
+#### Scenario: missing or empty candidate transcript keeps pending recoverable
+
+- **WHEN** `claude-pending-*` 只有 response-derived candidate `sessionId`
+- **AND** candidate transcript 不存在、加载失败、解析后没有 displayable history rows，或只有 user rows 而没有 assistant/tool/reasoning evidence
+- **THEN** 系统 MUST keep the pending thread in recoverable waiting/blocking state
+- **AND** 系统 MUST NOT promote the candidate into canonical native session truth
+
 #### Scenario: follow-up after native session confirmation resumes native session
 
 - **WHEN** `claude-pending-*` 已通过 native `thread/started` event 收敛为 `claude:<nativeSessionId>`
@@ -64,17 +81,10 @@ TBD - synced from change fix-claude-thread-session-continuity. Update Purpose af
 
 当用户重新打开 `Claude` 历史会话时，系统 MUST 在 native session truth 尚未最终收敛前保留可读 surface 或等价 reconcile surface，不得出现“先看到历史、随后整块消失”的行为。
 
-#### Scenario: readable history is not cleared by late reconcile
+#### Scenario: synthetic continuation control-plane rows remain hidden during fallback validation
 
-- **WHEN** 用户重新打开某条 `Claude` 历史会话
-- **AND** 当前幕布已经存在可读 history rows
-- **AND** late native reconcile、canonical resolve 或等价 truth check 仍在进行
-- **THEN** 系统 MUST 保留可读 surface 或显示显式 reconcile surface
-- **AND** 系统 MUST NOT 直接掉回 blank / empty-thread success state
-
-#### Scenario: unresolved reopen becomes explicit reconcile failure
-
-- **WHEN** authoritative truth check 最终确认当前 sidebar-selected `Claude` entry 无法作为同一 native session reopen
-- **THEN** 系统 MUST 进入可解释的 reconcile failure 或 recoverable failure
-- **AND** 系统 MUST NOT 静默切换到另一条会话来伪装成 reopen 成功
+- **WHEN** Claude transcript contains synthetic resume rows such as `Continue from where you left off.` and `<synthetic>` `No response requested.`
+- **AND** the same transcript contains real user/tool/assistant rows
+- **THEN** fallback validation MUST ignore the synthetic control-plane rows
+- **AND** fallback validation MUST still treat the transcript as valid when real assistant/tool/reasoning rows remain
 
