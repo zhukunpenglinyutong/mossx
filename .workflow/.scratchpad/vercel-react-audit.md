@@ -60,7 +60,7 @@
 
 ---
 
-### - [ ] P0-3. Katex 同步加载
+### - [x] P0-3. Katex 同步加载
 
 - **文件**：`src/features/messages/components/Markdown.tsx:10` + 第 19 行 CSS
 - **规则**：`bundle-dynamic-imports`
@@ -374,7 +374,7 @@
 
 - [x] P0-1 scrollFadeDeps 反模式（Bug-fix 级别）
 - [x] P0-2 11 处 scroll passive
-- [ ] P0-3 Katex 懒加载
+- [x] P0-3 Katex 懒加载
 - [ ] P0-4 RegExp 缓存
 - [ ] P2-1 Sidebar useState lazy init
 - [ ] P3-1 RichTextInput touch passive

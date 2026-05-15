@@ -1,5 +1,10 @@
 import { cleanup } from "@testing-library/react";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeAll, vi } from "vitest";
+import { prewarmKatexAssets } from "../features/messages/components/Markdown";
+
+beforeAll(async () => {
+  await prewarmKatexAssets();
+});
 
 afterEach(() => {
   cleanup();
