@@ -22,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { RendererContextMenu } from "../../../components/ui/RendererContextMenu";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useExitedSessionVisibility } from "../hooks/useExitedSessionVisibility";
+import { registerKeydownHandler } from "../hooks/keyboardDispatcher";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
@@ -859,10 +860,7 @@ export function Sidebar({
         closeWorkspaceMenu();
       }
     };
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
+    return registerKeydownHandler(handleWindowKeyDown);
   }, [workspaceMenuState, closeWorkspaceMenu]);
 
   const renderWorkspaceMenuIcon = useCallback((iconKind: string) => {
@@ -1473,10 +1471,7 @@ export function Sidebar({
         closeFolderMovePicker();
       }
     };
-    window.addEventListener("keydown", handleWindowKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
+    return registerKeydownHandler(handleWindowKeyDown);
   }, [closeFolderMovePicker, folderMovePicker]);
 
   const handleCreateSessionFolder = useCallback(

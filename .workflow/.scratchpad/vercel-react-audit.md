@@ -169,7 +169,7 @@
 
 ---
 
-### - [ ] P1-4. 9 处独立 `window.addEventListener("keydown")` 监听器
+### - [x] P1-4. 9 处独立 `window.addEventListener("keydown")` 监听器
 
 - **文件清单**：
   - `src/features/app/hooks/useNewAgentShortcut.ts:37`
@@ -384,7 +384,7 @@
 - [x] P1-1 重型 Panel 代码分割
 - [x] P1-2 lucide-react 导入统一（搭配 eslint-plugin no-restricted-imports）
 - [x] P1-3 危险 `&&` 渲染重构（优先涉及 number/string 的）
-- [ ] P1-4 键盘事件统一调度
+- [x] P1-4 键盘事件统一调度
 - [ ] P1-5 Messages 添加 useDeferredValue
 
 ### 第三周（10 小时 - 长尾优化）

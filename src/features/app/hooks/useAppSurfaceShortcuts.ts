@@ -3,6 +3,7 @@ import {
   isEditableShortcutTarget,
   matchesShortcutForPlatform,
 } from "../../../utils/shortcuts";
+import { registerKeydownHandler } from "./keyboardDispatcher";
 
 type UseAppSurfaceShortcutsOptions = {
   isCompact: boolean;
@@ -97,8 +98,7 @@ export function useAppSurfaceShortcuts({
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return registerKeydownHandler(handleKeyDown);
   }, [
     isCompact,
     onCollapseRightPanel,

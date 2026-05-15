@@ -4,6 +4,7 @@ import { useDictationModel } from "../../dictation/hooks/useDictationModel";
 import { useHoldToDictate } from "../../dictation/hooks/useHoldToDictate";
 import type { AppSettings } from "../../../types";
 import { requestDictationPermission } from "../../../services/tauri";
+import { registerKeydownHandler } from "./keyboardDispatcher";
 
 type DictationController = {
   dictationModel: ReturnType<typeof useDictationModel>;
@@ -86,8 +87,7 @@ export function useDictationController(appSettings: AppSettings): DictationContr
     const handleEscape = (event: KeyboardEvent) => {
       escapeHandlerRef.current(event);
     };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
+    return registerKeydownHandler(handleEscape);
   }, []);
 
   useHoldToDictate({

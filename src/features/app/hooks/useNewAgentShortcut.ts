@@ -3,6 +3,7 @@ import {
   isEditableShortcutTarget,
   matchesShortcutForPlatform,
 } from "../../../utils/shortcuts";
+import { registerKeydownHandler } from "./keyboardDispatcher";
 
 type UseNewAgentShortcutOptions = {
   isEnabled: boolean;
@@ -34,7 +35,6 @@ export function useNewAgentShortcut({
         onTrigger();
       }
     }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return registerKeydownHandler(handleKeyDown);
   }, [isEnabled, onTrigger, shortcut]);
 }
