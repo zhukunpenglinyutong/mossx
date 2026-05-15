@@ -11,6 +11,10 @@ Could not create surfaceless EGL display: EGL_BAD_ALLOC. Aborting...
 
 本变更要把这个用户 workaround 收敛为仓库发布流程的一部分：Linux AppImage 构建完成后自动剔除 bundled `libwayland-*`，重新打包并重新签名，避免让用户手工解包。
 
+### 后续验证记录
+
+- 2026-05-15：`desktop-cc-gui#379` 对应问题已确认修复方向正确。根因不是运行时 `WEBKIT_*` fallback 缺失，而是 AppImage 内 bundled `libwayland-*` 与 Arch Wayland/Mesa/EGL ABI 混用；将 `libwayland-*` pruning 固化到 AppImage packaging 后，问题闭环。
+
 ## 目标与边界
 
 ### 目标
@@ -73,6 +77,7 @@ Could not create surfaceless EGL display: EGL_BAD_ALLOC. Aborting...
 - Pruning script MUST fail with a clear error when `appimagetool` is unavailable or repack fails.
 - Pruning script MUST restore the original AppImage if repack fails after deleting the target path.
 - Tests MUST cover the library selection boundary and failure recovery behavior.
+- `desktop-cc-gui#379` MUST be recorded as an affected-user validation reference once the AppImage packaging fix is confirmed.
 
 ## Impact
 

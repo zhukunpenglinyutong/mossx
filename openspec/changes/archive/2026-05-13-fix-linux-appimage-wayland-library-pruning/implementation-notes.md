@@ -28,11 +28,13 @@
 - `node --test scripts/prune-appimage-wayland-libs.test.mjs` was run during implementation.
 - `npm run typecheck` was run during implementation.
 - `openspec validate --all --strict --no-interactive` passes after the backfill pass.
+- 2026-05-15: `desktop-cc-gui#379` was recorded as the affected-user issue for the AppImage Wayland/Mesa/EGL crash. The confirmed fix is the packaging-level `libwayland-*` pruning, not an additional runtime startup fallback.
 
 ### Remaining Manual Evidence
 
-- `tasks.md` keeps `4.3` open until a Linux build artifact is extracted and checked with `find squashfs-root/usr/lib -name 'libwayland-*'`.
-- `tasks.md` keeps `4.4` open until an Arch Linux / Wayland smoke test confirms the final AppImage starts without the `wl_fixes_interface` failure.
+- Historical archive note: `tasks.md` originally closed `4.3` and `4.4` through owner-approved release qualifiers because this macOS host could not truthfully produce Linux artifact or Arch Wayland smoke evidence.
+- Follow-up issue evidence on 2026-05-15 closes the root-cause direction for `desktop-cc-gui#379`: the correct remediation is AppImage artifact pruning of bundled `libwayland-*`.
+- Before making a broad release/platform claim, still prefer direct Linux artifact inspection and Arch Wayland smoke on the final release asset.
 
 ### Rollback
 

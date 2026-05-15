@@ -43,3 +43,7 @@ The following active changes are intentionally out of scope for this Phase 1 clo
 
 - `add-codex-structured-launch-profile`
 - `project-memory-refactor`
+
+## Follow-up Evidence
+
+- 2026-05-15: `desktop-cc-gui#379` was recorded against `fix-linux-appimage-wayland-library-pruning` as the affected-user validation reference. The issue confirms the correct fix direction: remove bundled `usr/lib/libwayland-*` from the final Linux AppImage so host Mesa/EGL resolves against the system Wayland client ABI.
