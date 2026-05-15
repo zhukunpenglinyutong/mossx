@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 465
+- **Total Sessions**: 466
 - **Last Active**: 2026-05-15
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~1354 | Active |
+| `journal-13.md` | ~1404 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 466 | 2026-05-15 | 增强 Claude 首包延迟诊断 | `e4aadd8d` | `feature/v0.4.18` |
 | 465 | 2026-05-15 | 记录 Claude 流式首包延迟诊断 | `c552adb5` | `feature/v0.4.18` |
 | 464 | 2026-05-15 | 强化 Claude stream-json 首包存活检测 | `5aa06c13` | `feature/v0.4.18` |
 | 463 | 2026-05-15 | 记录 Codex 静默存活验证完成 | `7e605945` | `feature/v0.4.18` |

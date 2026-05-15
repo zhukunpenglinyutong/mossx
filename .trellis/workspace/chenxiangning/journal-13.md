@@ -1352,3 +1352,53 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 466: 增强 Claude 首包延迟诊断
+
+**Date**: 2026-05-15
+**Task**: 增强 Claude 首包延迟诊断
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+提交 Claude Code repeat-turn 首包延迟诊断变更，拆分 spawn/stdin/stdout/valid-event/text-delta 阶段，并验证 Windows/macOS 流式兼容边界。
+
+### Main Changes
+
+本次收口内容：
+- 创建并实现 OpenSpec change: fix-claude-repeat-turn-first-token-latency。
+- Rust Claude engine 记录 spawn、stdin close、first stdout line、first valid stream event、first text delta 等首包阶段时间。
+- Claude forwarder 将 redacted numeric timing 附加到 ccguiTiming，不透传 prompt/response/stdout 文本。
+- Frontend streamLatencyDiagnostics 增加 Claude first-token phase 分类，且不把无 text delta 的首包诊断误触发为 visible-output-stall mitigation。
+- 保留旧 Windows streaming visibility 修复边界：Windows text delta coalesce 仍只由 cfg!(windows) 启用，macOS 不受影响。
+
+验证：
+- openspec validate fix-claude-repeat-turn-first-token-latency --strict --no-interactive
+- cargo test --manifest-path src-tauri/Cargo.toml claude_forwarder -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml send_message_batches_windows_text_deltas_without_delaying_other_platforms -- --nocapture
+- npx vitest run src/features/threads/utils/streamLatencyDiagnostics.test.ts
+- npm run lint -- --quiet
+- npm run typecheck
+- npm run check:runtime-contracts
+- npm run check:large-files:gate
+- npm run check:heavy-test-noise
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e4aadd8d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
