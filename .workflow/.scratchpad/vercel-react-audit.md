@@ -225,8 +225,18 @@
 
 ---
 
-### - [ ] P2-2. Vite 缺少 manualChunks 策略
+### - [x] P2-2. Vite 缺少 manualChunks 策略
 
+- **实测收益**（2026-05-16）：
+  - App entry chunk：**5.6MB → 4.47MB（-1.13MB / -20%）**
+  - gzip 后 entry：~1.30MB
+  - 新增 4 个独立 vendor chunks：
+    - `vendor-codemirror` 865KB（gzip 305KB）
+    - `vendor-markdown` 598KB（gzip 180KB，纯 markdown 解析链，无 React 依赖避免循环）
+    - `vendor-react` 393KB（gzip 128KB）
+    - `vendor-tauri` 25KB（gzip 6KB）
+  - 总 dist 大小不变（15MB），但每个 vendor chunk 可被 WebView 独立缓存 + 并行解析
+- **后续待跟进**（独立 bug）：build 警告 `FileViewPanel.tsx is dynamically imported by useLayoutNodes.tsx but also statically imported by FileExplorerWorkspace.tsx, WorkspaceEditableDiffReviewSurface.tsx` —— P1-1 的 lazy load 被静态 import 抢占失效，FileViewPanel 仍在 App chunk 中。修法：把 FileExplorerWorkspace 与 WorkspaceEditableDiffReviewSurface 内的静态 import 也改为 lazy。
 - **文件**：`vite.config.ts`（已验证无 build.rollupOptions）
 - **规则**：`bundle-analyzable-paths`
 - **修复**：
@@ -389,7 +399,7 @@
 
 ### 第三周（10 小时 - 长尾优化）
 
-- [ ] P2-2 Vite manualChunks
+- [x] P2-2 Vite manualChunks
 - [ ] P2-3 文件预览并行
 - [ ] P2-4 启动 hook 并行
 - [x] P2-5 简单 useMemo 清理

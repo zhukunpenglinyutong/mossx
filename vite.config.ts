@@ -45,6 +45,24 @@ export default defineConfig(async ({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("/react-dom/") || /\/react\//.test(id) || id.includes("scheduler"))
+            return "vendor-react";
+          if (id.includes("@codemirror/") || id.includes("@lezer/")) return "vendor-codemirror";
+          if (id.includes("@tauri-apps/")) return "vendor-tauri";
+          // Pure markdown parsing chains (no React deps) — keeps vendor-react acyclic
+          if (id.includes("/katex/") || id.includes("micromark") ||
+              id.includes("mdast-") || id.includes("hast-") || id.includes("unist-") ||
+              id.includes("remark-") || id.includes("rehype-"))
+            return "vendor-markdown";
+        },
+      },
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
