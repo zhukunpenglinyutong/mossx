@@ -4,7 +4,7 @@
 //! streaming JSON output.
 
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -125,6 +125,9 @@ struct PendingClaudeToolSummary {
 const RETRYABLE_PROMPT_TOO_LONG_PREFIX: &str = "__claude_retryable_prompt_too_long__:";
 const AUTO_COMPACT_SIGNAL_SOURCE: &str = "auto_compact_retry";
 const CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS: u64 = 32;
+const CLAUDE_NON_INTERACTIVE_ENV: &str = "CLAUDE_NON_INTERACTIVE";
+const CLAUDE_CONTEXT_COMMAND_PROBE_COOLDOWN: Duration = Duration::from_secs(120);
+const CLAUDE_CONTEXT_COMMAND_SHORT_PROMPT_MAX_CHARS: usize = 80;
 #[cfg(not(test))]
 const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(90);
 #[cfg(test)]
@@ -138,6 +141,14 @@ struct BufferedClaudeTextDelta {
     started_at: Option<Instant>,
     first_stdout_received_at_ms: Option<u64>,
     stream_startup_timing: Option<ClaudeStreamStartupTiming>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClaudeContextCommandProbeDecision {
+    Run,
+    SkipLiveTelemetry,
+    SkipShortPrompt,
+    SkipCooldown,
 }
 
 impl BufferedClaudeTextDelta {
@@ -248,6 +259,10 @@ pub struct ClaudeSession {
     pending_tools: StdMutex<Vec<PendingClaudeTool>>,
     /// Last emitted text for assistant partial messages, isolated per turn
     last_emitted_text_by_turn: StdMutex<HashMap<String, String>>,
+    /// Turns that already received authoritative live context-window usage.
+    live_context_usage_turns: StdMutex<HashSet<String>>,
+    /// Last low-frequency `/context` probe reservation per Claude session id.
+    last_context_probe_by_session: StdMutex<HashMap<String, Instant>>,
     /// Pending AskUserQuestion requests: request_id -> turn_id
     pending_user_inputs: StdMutex<HashMap<String, String>>,
     /// Pending synthetic Claude approval requests: request_id -> turn_id
@@ -512,6 +527,8 @@ impl ClaudeSession {
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
             pending_tools: StdMutex::new(Vec::new()),
             last_emitted_text_by_turn: StdMutex::new(HashMap::new()),
+            live_context_usage_turns: StdMutex::new(HashSet::new()),
+            last_context_probe_by_session: StdMutex::new(HashMap::new()),
             pending_user_inputs: StdMutex::new(HashMap::new()),
             pending_approval_requests: StdMutex::new(HashMap::new()),
             synthetic_approval_summaries_by_turn: StdMutex::new(HashMap::new()),
@@ -768,6 +785,7 @@ impl ClaudeSession {
         cmd.stderr(Stdio::piped());
 
         // Environment
+        cmd.env(CLAUDE_NON_INTERACTIVE_ENV, "1");
         if let Some(ref home) = self.home_dir {
             cmd.env("CLAUDE_HOME", home);
         }
@@ -1472,7 +1490,7 @@ impl ClaudeSession {
         );
 
         if let Some(session_id) = self.get_session_id().await {
-            self.emit_context_command_usage_update(turn_id, &session_id)
+            self.emit_context_command_usage_update(turn_id, &session_id, &params)
                 .await;
         }
 

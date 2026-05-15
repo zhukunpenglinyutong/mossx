@@ -68,6 +68,19 @@ fn build_command_includes_hook_events_when_requested() {
 }
 
 #[test]
+fn build_command_marks_gui_launch_as_claude_non_interactive() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let command = session.build_command(&params, false, true);
+
+    assert!(command.as_std().get_envs().any(|(key, value)| {
+        key == CLAUDE_NON_INTERACTIVE_ENV && value.is_some_and(|entry| entry == "1")
+    }));
+}
+
+#[test]
 fn build_command_can_omit_hook_events_for_legacy_retry() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let mut params = SendMessageParams::default();
@@ -315,6 +328,108 @@ fn convert_event_emits_live_context_window_usage_from_snake_case_payload() {
         }
         other => panic!("expected usage update, got {:?}", other),
     }
+    assert!(session.has_live_context_usage_seen("turn-usage"));
+}
+
+#[test]
+fn convert_event_does_not_mark_incomplete_context_window_as_probe_satisfied() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let event = json!({
+        "type": "system",
+        "subtype": "status",
+        "context_window": {
+            "current_usage": null,
+            "context_window_size": 258_400,
+            "used_percentage": 65,
+            "remaining_percentage": 35
+        }
+    });
+
+    let _ = session.convert_event("turn-incomplete-context", &event);
+
+    assert!(!session.has_live_context_usage_seen("turn-incomplete-context"));
+}
+
+#[test]
+fn context_command_probe_is_skipped_after_live_context_usage() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    session.mark_live_context_usage_seen("turn-live");
+    let mut params = SendMessageParams::default();
+    params.text = "请分析这个项目里的 Claude context usage 走势和风险".repeat(4);
+
+    let decision = session.reserve_context_command_probe("turn-live", "session-live", &params);
+
+    assert_eq!(
+        decision,
+        ClaudeContextCommandProbeDecision::SkipLiveTelemetry
+    );
+}
+
+#[test]
+fn context_command_probe_is_skipped_for_short_text_turns() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "你好".to_string();
+
+    let decision = session.reserve_context_command_probe("turn-short", "session-short", &params);
+
+    assert_eq!(decision, ClaudeContextCommandProbeDecision::SkipShortPrompt);
+}
+
+#[test]
+fn context_command_probe_is_throttled_per_session_after_reservation() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text =
+        "请基于当前仓库完整分析 Claude context usage 显示链路，指出风险并给出改进建议。".repeat(4);
+
+    let first = session.reserve_context_command_probe("turn-one", "session-throttle", &params);
+    let second = session.reserve_context_command_probe("turn-two", "session-throttle", &params);
+
+    assert_eq!(first, ClaudeContextCommandProbeDecision::Run);
+    assert_eq!(second, ClaudeContextCommandProbeDecision::SkipCooldown);
+}
+
+#[test]
+fn context_command_probe_allows_next_session_despite_other_session_cooldown() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text =
+        "请基于当前仓库完整分析 Claude context usage 显示链路，指出风险并给出改进建议。".repeat(4);
+
+    let first = session.reserve_context_command_probe("turn-one", "session-a", &params);
+    let second = session.reserve_context_command_probe("turn-two", "session-b", &params);
+
+    assert_eq!(first, ClaudeContextCommandProbeDecision::Run);
+    assert_eq!(second, ClaudeContextCommandProbeDecision::Run);
+}
+
+#[test]
+fn context_command_probe_prunes_expired_session_reservations() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text =
+        "请基于当前仓库完整分析 Claude context usage 显示链路，指出风险并给出改进建议。".repeat(4);
+    {
+        let mut probes = session
+            .last_context_probe_by_session
+            .lock()
+            .expect("lock context probe reservations");
+        probes.insert(
+            "expired-session".to_string(),
+            Instant::now() - CLAUDE_CONTEXT_COMMAND_PROBE_COOLDOWN - Duration::from_secs(1),
+        );
+    }
+
+    let decision = session.reserve_context_command_probe("turn-prune", "fresh-session", &params);
+    let probes = session
+        .last_context_probe_by_session
+        .lock()
+        .expect("lock context probe reservations");
+
+    assert_eq!(decision, ClaudeContextCommandProbeDecision::Run);
+    assert!(!probes.contains_key("expired-session"));
+    assert!(probes.contains_key("fresh-session"));
 }
 
 #[test]

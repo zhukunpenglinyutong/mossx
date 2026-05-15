@@ -58,6 +58,7 @@ The system MUST treat Claude CLI `context_window` telemetry as the authoritative
 
 - **WHEN** the system launches Claude CLI for a runtime turn
 - **THEN** it MUST request hook lifecycle events so Claude `context_window` telemetry can reach the stream parser
+- **AND** GUI-owned non-interactive Claude launches MUST set `CLAUDE_NON_INTERACTIVE=1` so project SessionStart hooks do not inject interactive startup context into ordinary user turns
 - **AND** if the installed Claude CLI rejects the hook lifecycle flag as unsupported
 - **THEN** the system MUST retry the turn without that flag for backward compatibility
 - **AND** it MUST NOT surface the unsupported-flag attempt as a user-visible turn failure
@@ -79,10 +80,27 @@ The system MUST treat Claude CLI `context_window` telemetry as the authoritative
 
 - **GIVEN** a Claude turn completes with a known Claude session id
 - **WHEN** the runtime needs a post-turn context snapshot or stream telemetry did not provide full context details
-- **THEN** it MUST invoke Claude CLI with `/context` against the same session
+- **THEN** it MAY invoke Claude CLI with `/context` against the same session only when the probe passes the runtime fallback gate
 - **AND** it MUST pass `--resume <session-id>` so the snapshot reflects the active conversation
 - **AND** it MUST pass `--no-session-persistence` so the diagnostic command does not append to conversation history
+- **AND** it MUST set `CLAUDE_NON_INTERACTIVE=1` for the diagnostic command
 - **AND** it MUST parse total tokens, context window capacity, and used percentage from the `/context` output
+
+#### Scenario: context command probe is low-frequency fallback
+
+- **GIVEN** a Claude turn completes without authoritative live context telemetry
+- **WHEN** the user prompt is short and has no images
+- **THEN** the runtime MUST NOT run the post-turn `/context` diagnostic command for that turn
+- **AND** the context indicator MAY remain pending until live telemetry, a later eligible fallback, or explicit user action provides a snapshot
+- **WHEN** an eligible fallback `/context` probe has already been reserved for the same Claude session within the cooldown window
+- **THEN** later turns in that session MUST NOT reserve another fallback `/context` probe until the cooldown expires
+
+#### Scenario: context command probe is skipped after authoritative live telemetry
+
+- **GIVEN** a Claude turn has already emitted live `context_window.current_usage` and `context_window_size`
+- **WHEN** the turn completes
+- **THEN** the runtime MUST NOT run the post-turn `/context` diagnostic command for that turn
+- **AND** the existing live usage snapshot MUST remain the authoritative context indicator source
 
 #### Scenario: context command parser preserves detailed category estimates
 

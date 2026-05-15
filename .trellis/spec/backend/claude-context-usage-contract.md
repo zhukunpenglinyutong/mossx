@@ -84,7 +84,7 @@ list_claude_sessions_from_base_dir(&base_dir, workspace_path, limit).await
 
 - Claude CLI runtime SHOULD include `--include-hook-events`.
 - Unsupported legacy fallback MUST retry without `--include-hook-events` when stderr/stdout indicates unknown/unrecognized/unsupported option.
-- Post-turn probe command:
+- Low-frequency fallback probe command:
 
 ```text
 claude -p "/context" --resume <session-id> --no-session-persistence
@@ -110,7 +110,10 @@ claude -p "/context" --resume <session-id> --no-session-persistence
 - `message.usage` / top-level `usage` is cumulative message usage and MUST NOT override `context_window.current_usage`.
 - `context_window.used_percentage` and `remaining_percentage` MUST be preserved when present; do not recompute conflicting percentages from cumulative usage.
 - `current_usage: null` or absent MAY emit window size/percent metadata but MUST NOT fabricate used tokens from cumulative usage.
-- `/context` probe MUST:
+- `/context` fallback probe MUST:
+  - skip when the same turn already emitted authoritative live `context_window.current_usage` and window size
+  - skip short text-only prompts so casual turns such as "你好" do not trigger diagnostic token-count bursts
+  - be reserved per Claude session and throttled by a cooldown window before spawning the CLI command
   - use current workspace as `current_dir`
   - set `CLAUDE_HOME` when runtime has a configured home
   - pipe stdout/stderr
@@ -129,12 +132,14 @@ claude -p "/context" --resume <session-id> --no-session-persistence
 | nested hook payload | recursively find `context_window` | only inspect top-level event |
 | `current_usage: null` | preserve available percent/window metadata | invent `0` or total usage |
 | CLI lacks hook flag | retry once without flag | fail visible user turn |
-| post-turn `/context` succeeds | emit estimated `context_command` update | close forwarder before update |
+| eligible fallback `/context` succeeds | emit estimated `context_command` update | close forwarder before update |
+| short text-only prompt | skip fallback `/context` and keep existing/pending usage | run diagnostic token-count burst for casual turns |
+| same session inside cooldown | skip fallback `/context` | spawn a probe after every turn |
 | `/context` fails or times out | log debug and keep existing usage | block send completion |
 
 ### 5. Good / Base / Bad Cases
 
-- Good：stream emits `context_window`, UI sees `freshness="live"`; after completion `/context` may provide categories as `freshness="estimated"`.
+- Good：stream emits `context_window`, UI sees `freshness="live"`; fallback `/context` only runs for eligible low-frequency diagnostic refreshes and may provide categories as `freshness="estimated"`.
 - Base：older CLI emits only `message.usage`; usage is marked `estimated`, no fake window capacity.
 - Bad：mapping uses `model_context_window.unwrap_or(200000)` in app-server event, making missing live data look authoritative.
 

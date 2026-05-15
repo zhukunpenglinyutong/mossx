@@ -176,6 +176,10 @@ impl ClaudeSession {
     /// 3. usage (top-level usage field)
     pub(super) fn try_extract_context_window_usage(&self, turn_id: &str, event: &Value) {
         let usage_snapshot = self.find_usage_data(event);
+        let has_authoritative_live_context_usage = usage_snapshot.source == "context_window"
+            && usage_snapshot.freshness == "live"
+            && usage_snapshot.context_used_tokens.is_some()
+            && usage_snapshot.model_context_window.is_some();
 
         if usage_snapshot.context_used_tokens.is_some()
             || usage_snapshot.model_context_window.is_some()
@@ -213,9 +217,30 @@ impl ClaudeSession {
                 },
             );
         }
+
+        if has_authoritative_live_context_usage {
+            self.mark_live_context_usage_seen(turn_id);
+        }
     }
 
-    pub(super) async fn emit_context_command_usage_update(&self, turn_id: &str, session_id: &str) {
+    pub(super) async fn emit_context_command_usage_update(
+        &self,
+        turn_id: &str,
+        session_id: &str,
+        params: &SendMessageParams,
+    ) {
+        match self.reserve_context_command_probe(turn_id, session_id, params) {
+            ClaudeContextCommandProbeDecision::Run => {}
+            decision => {
+                log::debug!(
+                    "[claude] skipping /context probe for turn={} session={} reason={:?}",
+                    turn_id,
+                    session_id,
+                    decision
+                );
+                return;
+            }
+        }
         let Some(snapshot) = self.fetch_context_command_usage_snapshot(session_id).await else {
             return;
         };
@@ -247,6 +272,46 @@ impl ClaudeSession {
         );
     }
 
+    pub(super) fn reserve_context_command_probe(
+        &self,
+        turn_id: &str,
+        session_id: &str,
+        params: &SendMessageParams,
+    ) -> ClaudeContextCommandProbeDecision {
+        if self.has_live_context_usage_seen(turn_id) {
+            return ClaudeContextCommandProbeDecision::SkipLiveTelemetry;
+        }
+        if Self::is_short_context_command_probe_prompt(params) {
+            return ClaudeContextCommandProbeDecision::SkipShortPrompt;
+        }
+
+        let now = Instant::now();
+        let Ok(mut probes) = self.last_context_probe_by_session.lock() else {
+            return ClaudeContextCommandProbeDecision::SkipCooldown;
+        };
+        probes.retain(|_, last_probe| {
+            now.duration_since(*last_probe) < CLAUDE_CONTEXT_COMMAND_PROBE_COOLDOWN
+        });
+        if probes.get(session_id).is_some_and(|last_probe| {
+            now.duration_since(*last_probe) < CLAUDE_CONTEXT_COMMAND_PROBE_COOLDOWN
+        }) {
+            return ClaudeContextCommandProbeDecision::SkipCooldown;
+        }
+        probes.insert(session_id.to_string(), now);
+        ClaudeContextCommandProbeDecision::Run
+    }
+
+    fn is_short_context_command_probe_prompt(params: &SendMessageParams) -> bool {
+        if params
+            .images
+            .as_ref()
+            .is_some_and(|images| !images.is_empty())
+        {
+            return false;
+        }
+        params.text.trim().chars().count() <= CLAUDE_CONTEXT_COMMAND_SHORT_PROMPT_MAX_CHARS
+    }
+
     async fn fetch_context_command_usage_snapshot(
         &self,
         session_id: &str,
@@ -268,6 +333,7 @@ impl ClaudeSession {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .stdin(std::process::Stdio::null());
+        cmd.env(CLAUDE_NON_INTERACTIVE_ENV, "1");
         if let Some(home) = &self.home_dir {
             cmd.env("CLAUDE_HOME", home);
         }
@@ -295,6 +361,19 @@ impl ClaudeSession {
         }
         let stdout = String::from_utf8_lossy(&output.stdout);
         parse_context_command_usage(&stdout)
+    }
+
+    pub(super) fn mark_live_context_usage_seen(&self, turn_id: &str) {
+        if let Ok(mut turns) = self.live_context_usage_turns.lock() {
+            turns.insert(turn_id.to_string());
+        }
+    }
+
+    pub(super) fn has_live_context_usage_seen(&self, turn_id: &str) -> bool {
+        self.live_context_usage_turns
+            .lock()
+            .map(|turns| turns.contains(turn_id))
+            .unwrap_or(false)
     }
 
     /// Find usage data from various locations in the event
