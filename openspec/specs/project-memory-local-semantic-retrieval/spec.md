@@ -124,4 +124,3 @@ The system SHALL report production semantic retrieval only when a real productio
 - **WHEN** semantic tests use fake or test-scoped providers
 - **THEN** those tests SHALL NOT be used as evidence that production vector retrieval is enabled
 - **AND** production send-path tests SHALL verify behavior without `allowTestProvider`
-

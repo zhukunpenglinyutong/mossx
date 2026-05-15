@@ -70,4 +70,3 @@ The client SHALL scope progressive file tree state to the active workspace and c
 - **WHEN** the user refreshes the workspace file tree
 - **THEN** the client SHALL reconcile or clear previously loaded directory state against the latest workspace snapshot
 - **AND** stale nodes that no longer belong to the active workspace SHALL NOT remain visible
-

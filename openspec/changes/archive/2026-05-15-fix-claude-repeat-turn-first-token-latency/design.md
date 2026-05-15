@@ -99,16 +99,16 @@ Alternatives considered:
 
 ## Risks / Trade-offs
 
-- [Risk] The new evidence proves the delay is upstream in Claude CLI/provider, not locally fixable.  
+- [Risk] The new evidence proves the delay is upstream in Claude CLI/provider, not locally fixable.
   Mitigation: classify accurately and avoid damaging already-good streaming paths with unrelated throttle changes.
 
-- [Risk] More timing fields increase payload surface.  
+- [Risk] More timing fields increase payload surface.
   Mitigation: keep fields numeric, bounded, debug-only on frontend consumption, and covered by redaction tests.
 
-- [Risk] Backend and frontend clocks can drift.  
+- [Risk] Backend and frontend clocks can drift.
   Mitigation: use monotonic phase ordering for backend-derived durations where possible and clamp invalid frontend gaps.
 
-- [Risk] Repeat-turn waits involving reasoning/tool events can be mistaken for a bug.  
+- [Risk] Repeat-turn waits involving reasoning/tool events can be mistaken for a bug.
   Mitigation: track first valid event separately from first text delta and classify valid non-text activity as "valid-event-no-text" rather than silent stall.
 
 ## Migration Plan

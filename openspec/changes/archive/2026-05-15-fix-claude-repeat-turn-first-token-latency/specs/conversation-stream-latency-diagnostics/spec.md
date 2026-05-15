@@ -26,4 +26,3 @@ The system MUST classify Claude Code first-token delay separately from backend f
 - **WHEN** frontend diagnostics receive missing, non-finite, negative, or otherwise malformed timing fields
 - **THEN** diagnostics MUST ignore or clamp those fields safely
 - **AND** diagnostic gap calculations MUST NOT produce negative durations
-

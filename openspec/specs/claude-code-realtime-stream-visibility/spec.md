@@ -123,4 +123,3 @@ Claude Code visible-stream mitigation MUST activate only after assistant text de
 - **WHEN** a Claude Code assistant text delta has been emitted and app-server delivery has occurred
 - **THEN** subsequent lack of visible text growth MAY be classified as visible-output stall
 - **AND** the existing Claude Windows visible-stream mitigation rules MUST remain available
-

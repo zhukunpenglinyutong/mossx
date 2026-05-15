@@ -110,4 +110,3 @@ The system SHALL preserve Retrieval Pack and Cleaner contracts when Memory Refer
 - **WHEN** Memory Reference logs fallback retrieval diagnostics
 - **THEN** diagnostics SHALL include status, mode, counts, ids, or elapsed time only
 - **AND** diagnostics SHALL NOT include full `userInput`, `assistantResponse`, `cleanText`, or cleaned context
-

@@ -32,4 +32,3 @@ The system MUST add first-token observability without changing Claude Code strea
 - **WHEN** timing evidence shows stdin was closed and no stdout or no assistant text has arrived for a bounded period
 - **THEN** diagnostics MAY report first-token latency
 - **AND** the conversation UI MUST NOT fabricate assistant text or collapse the turn into final-only output
-

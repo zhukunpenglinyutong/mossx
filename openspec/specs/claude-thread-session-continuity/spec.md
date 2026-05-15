@@ -87,4 +87,3 @@ TBD - synced from change fix-claude-thread-session-continuity. Update Purpose af
 - **AND** the same transcript contains real user/tool/assistant rows
 - **THEN** fallback validation MUST ignore the synthetic control-plane rows
 - **AND** fallback validation MUST still treat the transcript as valid when real assistant/tool/reasoning rows remain
-

@@ -102,4 +102,3 @@ The UI MUST make the explicit resume path understandable when Claude TUI's no-ar
 - **WHEN** a GUI-created Claude transcript is marked with `entrypoint: "sdk-cli"`
 - **THEN** the system MUST NOT claim it is a native TUI-created `entrypoint: "cli"` session
 - **AND** it MUST NOT mutate transcript metadata solely to make the TUI picker list it
-

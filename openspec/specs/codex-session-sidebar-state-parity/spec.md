@@ -71,4 +71,3 @@ When the frontend starts a new Codex conversation for the same workspace and fol
 - **WHEN** an in-flight Codex start fails
 - **THEN** the in-flight guard MUST be released
 - **AND** a later user action MAY attempt a new backend start
-

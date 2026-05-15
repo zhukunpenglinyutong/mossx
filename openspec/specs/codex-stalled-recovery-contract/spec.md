@@ -136,4 +136,3 @@ Codex stalled recovery MUST use a 1200-second execution-active no-progress windo
 - **AND** an `item/started`, `item/updated`, `item/completed`, tool output delta, assistant delta, heartbeat, status-active event, or equivalent normalized realtime event arrives before the execution-active timeout
 - **THEN** the system MUST treat that event as progress evidence
 - **AND** the 1200-second no-progress window MUST be measured from that latest progress evidence
-

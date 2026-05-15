@@ -14,4 +14,3 @@ The Claude Code stream forwarding latency contract MUST only classify delays aft
 - **WHEN** the first Claude Code assistant text delta reaches the backend forwarder
 - **THEN** the forwarder MUST emit the corresponding app-server event before runtime diagnostics or ledger persistence
 - **AND** this guarantee MUST apply regardless of any earlier first-token latency recorded for the turn
-
