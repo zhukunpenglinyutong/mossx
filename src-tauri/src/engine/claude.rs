@@ -77,6 +77,11 @@ struct PendingClaudeToolSummary {
 const RETRYABLE_PROMPT_TOO_LONG_PREFIX: &str = "__claude_retryable_prompt_too_long__:";
 const AUTO_COMPACT_SIGNAL_SOURCE: &str = "auto_compact_retry";
 const CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS: u64 = 32;
+#[cfg(not(test))]
+const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(90);
+#[cfg(test)]
+const CLAUDE_STREAM_FIRST_EVENT_TIMEOUT: Duration = Duration::from_secs(10);
+const CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT: usize = 800;
 const CLAUDE_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, Default)]
@@ -231,6 +236,129 @@ impl ClaudeSession {
                 || normalized.contains("unexpected")
                 || normalized.contains("invalid option")
                 || normalized.contains("not supported"))
+    }
+
+    fn push_stream_diagnostic_sample(sample: &mut String, text: &str) {
+        if sample.len() >= CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT {
+            return;
+        }
+        let remaining = CLAUDE_STREAM_DIAGNOSTIC_SAMPLE_LIMIT - sample.len();
+        if text.len() <= remaining {
+            sample.push_str(text);
+            return;
+        }
+
+        let mut end = 0;
+        for (index, _) in text.char_indices() {
+            if index > remaining {
+                break;
+            }
+            end = index;
+        }
+        if end == 0 {
+            return;
+        }
+        sample.push_str(&text[..end]);
+    }
+
+    fn build_stream_no_event_timeout_error(diagnostic_sample: &str) -> String {
+        let base = format!(
+            "Claude stream-json startup timed out after {}s without a valid stream event",
+            CLAUDE_STREAM_FIRST_EVENT_TIMEOUT.as_secs()
+        );
+        let sample = diagnostic_sample.trim();
+        if sample.is_empty() {
+            return format!("{base}. No stdout/stderr diagnostics were observed.");
+        }
+        format!("{base}. Diagnostic sample:\n{}", sample)
+    }
+
+    fn stream_diagnostic_sample_snapshot(sample: &Arc<StdMutex<String>>) -> String {
+        sample.lock().map(|value| value.clone()).unwrap_or_default()
+    }
+
+    fn is_valid_claude_stream_event(event: &Value) -> bool {
+        matches!(
+            event.get("type").and_then(|value| value.as_str()),
+            Some(
+                "stream_event"
+                    | "system"
+                    | "assistant"
+                    | "assistant_message_delta"
+                    | "message_delta"
+                    | "text_delta"
+                    | "output_text_delta"
+                    | "assistant_message"
+                    | "message"
+                    | "user"
+                    | "result"
+                    | "reasoning_delta"
+                    | "thinking_delta"
+                    | "error"
+                    | "tool_use"
+                    | "tool_result"
+            )
+        )
+    }
+
+    async fn fail_stream_no_event_timeout(
+        &self,
+        turn_id: &str,
+        diagnostic_sample: Arc<StdMutex<String>>,
+        mut stderr_handle: tokio::task::JoinHandle<String>,
+    ) -> Result<String, String> {
+        let mut child = {
+            let mut active = self.active_processes.lock().await;
+            active.remove(turn_id)
+        };
+        if let Some(mut child_proc) = child.take() {
+            if let Err(error) = self.terminate_child_process(turn_id, &mut child_proc).await {
+                log::warn!(
+                    "[claude] failed to terminate stream-timeout child for turn={}: {}",
+                    turn_id,
+                    error
+                );
+            }
+        }
+        tokio::select! {
+            _ = &mut stderr_handle => {}
+            _ = tokio::time::sleep(Duration::from_secs(2)) => {
+                stderr_handle.abort();
+            }
+        }
+        let error_msg = Self::build_stream_no_event_timeout_error(
+            &Self::stream_diagnostic_sample_snapshot(&diagnostic_sample),
+        );
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnError {
+                workspace_id: self.workspace_id.clone(),
+                error: error_msg.clone(),
+                code: Some("claude_stream_no_event_timeout".to_string()),
+            },
+        );
+        self.clear_turn_ephemeral_state(turn_id);
+        Err(error_msg)
+    }
+
+    fn emit_stream_no_valid_event_error(&self, turn_id: &str, diagnostic_sample: &str) -> String {
+        let error_msg = if diagnostic_sample.trim().is_empty() {
+            "Claude stream-json ended without a valid stream event.".to_string()
+        } else {
+            format!(
+                "Claude stream-json ended without a valid stream event. Diagnostic sample:\n{}",
+                diagnostic_sample.trim()
+            )
+        };
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnError {
+                workspace_id: self.workspace_id.clone(),
+                error: error_msg.clone(),
+                code: Some("claude_stream_no_valid_event".to_string()),
+            },
+        );
+        error_msg
     }
 
     /// Create a new Claude session for tests.
@@ -750,6 +878,9 @@ impl ClaudeSession {
         let mut error_output = String::new();
         let mut stream_runtime_error: Option<String> = None;
         let mut stream_error_event_emitted = false;
+        let mut saw_valid_stream_event = false;
+        let first_event_deadline = Instant::now() + CLAUDE_STREAM_FIRST_EVENT_TIMEOUT;
+        let stream_diagnostic_sample = Arc::new(StdMutex::new(String::new()));
         let text_delta_coalesce_window = if cfg!(windows) {
             Duration::from_millis(CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS)
         } else {
@@ -760,12 +891,17 @@ impl ClaudeSession {
         // Spawn stderr reader
         let stderr_reader = BufReader::new(stderr);
         let _workspace_id_clone = self.workspace_id.clone();
+        let stderr_diagnostic_sample = Arc::clone(&stream_diagnostic_sample);
         let stderr_handle = tokio::spawn(async move {
             let mut lines = stderr_reader.lines();
             let mut stderr_text = String::new();
             while let Ok(Some(line)) = lines.next_line().await {
                 stderr_text.push_str(&line);
                 stderr_text.push('\n');
+                if let Ok(mut sample) = stderr_diagnostic_sample.lock() {
+                    ClaudeSession::push_stream_diagnostic_sample(&mut sample, &line);
+                    ClaudeSession::push_stream_diagnostic_sample(&mut sample, "\n");
+                }
             }
             stderr_text
         });
@@ -779,15 +915,50 @@ impl ClaudeSession {
             }
 
             let next_line = if pending_text_delta.is_empty() {
-                lines.next_line().await
+                if saw_valid_stream_event {
+                    lines.next_line().await
+                } else {
+                    let wait_duration = first_event_deadline
+                        .checked_duration_since(Instant::now())
+                        .unwrap_or(Duration::ZERO);
+                    match tokio::time::timeout(wait_duration, lines.next_line()).await {
+                        Ok(result) => result,
+                        Err(_) => {
+                            return self
+                                .fail_stream_no_event_timeout(
+                                    turn_id,
+                                    Arc::clone(&stream_diagnostic_sample),
+                                    stderr_handle,
+                                )
+                                .await;
+                        }
+                    }
+                }
             } else if let Some(wait_duration) =
                 pending_text_delta.remaining_window(text_delta_coalesce_window)
             {
+                let wait_duration = if saw_valid_stream_event {
+                    wait_duration
+                } else {
+                    let remaining_startup = first_event_deadline
+                        .checked_duration_since(Instant::now())
+                        .unwrap_or(Duration::ZERO);
+                    wait_duration.min(remaining_startup)
+                };
                 match tokio::time::timeout(wait_duration, lines.next_line()).await {
                     Ok(result) => result,
                     Err(_) => {
-                        self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
-                        continue;
+                        if saw_valid_stream_event {
+                            self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
+                            continue;
+                        }
+                        return self
+                            .fail_stream_no_event_timeout(
+                                turn_id,
+                                Arc::clone(&stream_diagnostic_sample),
+                                stderr_handle,
+                            )
+                            .await;
                     }
                 }
             } else {
@@ -816,6 +987,14 @@ impl ClaudeSession {
 
             match parse_claude_stream_json_line(&line) {
                 Ok(event) => {
+                    if Self::is_valid_claude_stream_event(&event) {
+                        saw_valid_stream_event = true;
+                    } else if !saw_valid_stream_event {
+                        if let Ok(mut sample) = stream_diagnostic_sample.lock() {
+                            Self::push_stream_diagnostic_sample(&mut sample, &line);
+                            Self::push_stream_diagnostic_sample(&mut sample, "\n");
+                        }
+                    }
                     // If Claude only emits a final result without streaming deltas,
                     // synthesize a text delta so the frontend still renders a reply.
                     if !saw_text_delta {
@@ -955,6 +1134,10 @@ impl ClaudeSession {
                     // Non-JSON output, might be error
                     error_output.push_str(&line);
                     error_output.push('\n');
+                    if let Ok(mut sample) = stream_diagnostic_sample.lock() {
+                        Self::push_stream_diagnostic_sample(&mut sample, &line);
+                        Self::push_stream_diagnostic_sample(&mut sample, "\n");
+                    }
                     if stream_runtime_error.is_none() {
                         if looks_like_claude_runtime_error(trimmed) {
                             stream_runtime_error = Some(trimmed.to_string());
@@ -1089,6 +1272,14 @@ impl ClaudeSession {
                     },
                 );
             }
+            self.clear_turn_ephemeral_state(turn_id);
+            return Err(error_msg);
+        }
+
+        if !saw_valid_stream_event {
+            let diagnostic_sample =
+                Self::stream_diagnostic_sample_snapshot(&stream_diagnostic_sample);
+            let error_msg = self.emit_stream_no_valid_event_error(turn_id, &diagnostic_sample);
             self.clear_turn_ephemeral_state(turn_id);
             return Err(error_msg);
         }
