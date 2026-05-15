@@ -4,7 +4,9 @@ import {
   buildThreeThreadReplayEventsForMinutes,
   REALTIME_REPLAY_BATCH_WINDOW_MS,
 } from "../src/features/threads/contracts/realtimeReplayFixture";
+import { buildRealtimePerfExtendedEvents } from "../src/features/threads/contracts/realtimePerfExtendedFixture";
 import { runReplayProfile } from "../src/features/threads/contracts/realtimeReplayHarness";
+import { getArgValue, isVerbose, percentile, roundMetric, writeJsonFile, type BaselineFragment } from "./perf-baseline-utils";
 
 type DurationReport = {
   minutes: number;
@@ -33,6 +35,52 @@ function hasIntegrityFailure(result: Awaited<ReturnType<typeof runReplayProfile>
     || result.integrity.missingToolOutputs.length > 0
     || result.integrity.stuckProcessingThreads.length > 0
   );
+}
+
+function isQuiet() {
+  return process.argv.includes("--quiet") || !isVerbose();
+}
+
+function computeExtendedMetrics(
+  events: ReturnType<typeof buildRealtimePerfExtendedEvents>,
+  result: Awaited<ReturnType<typeof runReplayProfile>>,
+) {
+  const firstAgentDelta = events.find((event) => event.kind === "agentDelta");
+  const agentDeltaTimes = events
+    .filter((event) => event.kind === "agentDelta")
+    .map((event) => event.atMs)
+    .sort((left, right) => left - right);
+  const jitters = agentDeltaTimes.slice(1).map((atMs, index) => atMs - (agentDeltaTimes[index] ?? atMs));
+  const deltaEvents = events.filter((event) => event.kind === "agentDelta");
+  const dedupHits = deltaEvents.filter((event) => event.delta.length === 0).length;
+  return [
+    {
+      scenario: "S-RS-FT",
+      metric: "firstTokenLatency",
+      value: firstAgentDelta?.atMs ?? null,
+      unit: "ms",
+      notes: "turn start to first assistant delta",
+    },
+    {
+      scenario: "S-RS-FT",
+      metric: "interTokenJitterP95",
+      value: roundMetric(percentile(jitters, 0.95)),
+      unit: "ms",
+    },
+    {
+      scenario: "S-RS-PE",
+      metric: "dedupHitRatio",
+      value: deltaEvents.length === 0 ? 0 : roundMetric(dedupHits / deltaEvents.length, 4),
+      unit: "ratio",
+    },
+    {
+      scenario: "S-RS-PE",
+      metric: "assemblerLatency",
+      value: roundMetric(result.metrics.wallTimeMs),
+      unit: "ms",
+      notes: "replay reducer-path proxy latency",
+    },
+  ];
 }
 
 function createBaselineReportMarkdown(reports: DurationReport[], generatedAt: string) {
@@ -111,6 +159,29 @@ function createAcceptanceReportMarkdown(reports: DurationReport[], generatedAt: 
 }
 
 async function main() {
+  if (getArgValue("--profile") === "extended") {
+    const events = buildRealtimePerfExtendedEvents();
+    const baseline = await runReplayProfile({
+      events,
+      profile: "baseline",
+      batchWindowMs: REALTIME_REPLAY_BATCH_WINDOW_MS,
+    });
+    const fragment: BaselineFragment = {
+      schemaVersion: "1.0",
+      generatedAt: new Date().toISOString(),
+      source: "realtime-extended",
+      metrics: computeExtendedMetrics(events, baseline),
+      residualRisks: hasIntegrityFailure(baseline)
+        ? ["Extended realtime fixture replay reported integrity failures."]
+        : [],
+    };
+    await writeJsonFile("docs/perf/realtime-extended-baseline.json", fragment);
+    if (!isQuiet()) {
+      console.info("Realtime extended baseline written: docs/perf/realtime-extended-baseline.json");
+    }
+    return;
+  }
+
   const durations = [5, 60];
   const reports: DurationReport[] = [];
 
@@ -196,9 +267,11 @@ async function main() {
 
   await writeFile(rawReportPath, JSON.stringify({ generatedAt, reports: compactReports }, null, 2), "utf-8");
 
-  console.info(`Realtime baseline report written: ${baselineReportPath}`);
-  console.info(`Realtime acceptance report written: ${acceptanceReportPath}`);
-  console.info(`Realtime raw report written: ${rawReportPath}`);
+  if (!process.argv.includes("--quiet")) {
+    console.info(`Realtime baseline report written: ${baselineReportPath}`);
+    console.info(`Realtime acceptance report written: ${acceptanceReportPath}`);
+    console.info(`Realtime raw report written: ${rawReportPath}`);
+  }
 }
 
 void main();

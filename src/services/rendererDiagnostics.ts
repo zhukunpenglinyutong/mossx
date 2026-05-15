@@ -12,16 +12,26 @@ export type RendererDiagnosticEntry = {
 
 const RENDERER_DIAGNOSTICS_KEY = "diagnostics.rendererLifecycleLog";
 const MAX_RENDERER_DIAGNOSTICS = 200;
+const MAX_PERF_ENTRIES = 1000;
 const EARLY_RENDERER_DIAGNOSTICS_STORAGE_KEY = "ccgui.bootstrapRendererDiagnostics";
 
 let installed = false;
 let bufferedEntries: RendererDiagnosticEntry[] = [];
 
 function trimDiagnostics(entries: RendererDiagnosticEntry[]) {
-  if (entries.length <= MAX_RENDERER_DIAGNOSTICS) {
-    return entries;
+  const regularEntries: RendererDiagnosticEntry[] = [];
+  const perfEntries: RendererDiagnosticEntry[] = [];
+  for (const entry of entries) {
+    if (entry.label.startsWith("perf.")) {
+      perfEntries.push(entry);
+    } else {
+      regularEntries.push(entry);
+    }
   }
-  return entries.slice(entries.length - MAX_RENDERER_DIAGNOSTICS);
+  return [
+    ...regularEntries.slice(Math.max(0, regularEntries.length - MAX_RENDERER_DIAGNOSTICS)),
+    ...perfEntries.slice(Math.max(0, perfEntries.length - MAX_PERF_ENTRIES)),
+  ].sort((left, right) => left.timestamp - right.timestamp);
 }
 
 function mergeDiagnostics(
@@ -40,6 +50,35 @@ function mergeDiagnostics(
     }
   }
   return trimDiagnostics(merged);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeDiagnosticEntry(value: unknown): RendererDiagnosticEntry | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const { timestamp, label, payload } = value;
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || typeof label !== "string") {
+    return null;
+  }
+  return {
+    timestamp,
+    label,
+    payload: isRecord(payload) ? payload : {},
+  };
+}
+
+function normalizeDiagnosticEntries(value: unknown): RendererDiagnosticEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const normalized = normalizeDiagnosticEntry(entry);
+    return normalized ? [normalized] : [];
+  });
 }
 
 function formatUnknown(value: unknown): string | null {
@@ -90,7 +129,7 @@ function readEarlyPersistedDiagnostics(): RendererDiagnosticEntry[] {
       return [];
     }
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed as RendererDiagnosticEntry[] : [];
+    return normalizeDiagnosticEntries(parsed);
   } catch {
     return [];
   }
@@ -119,7 +158,7 @@ function readPersistedDiagnostics() {
     "app",
     RENDERER_DIAGNOSTICS_KEY,
   );
-  return mergeDiagnostics(Array.isArray(stored) ? stored : [], readEarlyPersistedDiagnostics());
+  return mergeDiagnostics(normalizeDiagnosticEntries(stored), readEarlyPersistedDiagnostics());
 }
 
 export function appendRendererDiagnostic(
@@ -143,6 +182,13 @@ export function appendRendererDiagnostic(
   bufferedEntries = [];
   persistEarlyDiagnostics([]);
   persistDiagnostics(nextEntries);
+}
+
+export function appendRendererPerfDiagnostic(
+  label: "perf.web-vital",
+  payload: Record<string, unknown> = {},
+) {
+  appendRendererDiagnostic(label, payload);
 }
 
 export function flushRendererDiagnosticsBuffer() {
@@ -224,4 +270,14 @@ export function installRendererLifecycleDiagnostics() {
       }),
     );
   });
+
+  void import("./perfBaseline")
+    .then((module) => {
+      module.installPerfBaselineWebVitals();
+    })
+    .catch((error: unknown) => {
+      appendRendererDiagnostic("perf.web-vital/install-failed", {
+        error: formatUnknown(error),
+      });
+    });
 }
