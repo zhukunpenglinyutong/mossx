@@ -1,5 +1,11 @@
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+// Raise Testing Library's async utility timeout so CI runners (where
+// component commit can be 20x slower than local) do not flake on
+// waitFor / findBy* assertions. Local runs unaffected because they
+// resolve well under 1s.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(() => {
   cleanup();
