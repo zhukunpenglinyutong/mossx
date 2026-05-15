@@ -1802,3 +1802,85 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 476: 完成 add-runtime-perf-baseline 基线产出与三段式提交
+
+**Date**: 2026-05-16
+**Task**: 完成 add-runtime-perf-baseline 基线产出与三段式提交
+**Branch**: `feature/v0.5`
+
+### Summary
+
+三段式落盘 runtime perf baseline：采集层（feat）+ 报告与归档（docs）+ Rust 测试拆分（refactor）。working tree clean，OpenSpec strict validate 通过。
+
+### Main Changes
+
+
+## Summary
+
+将 v0.4.18 后续性能优化的 baseline 工作收口落盘。本次提交不修改任何业务代码（composer / messages / threads / runtime），只搭采集层 + 4 个 producer 脚本 + 报告归档协议。
+
+## Main Changes
+
+### Commit 1 — feat(perf): 采集层与 producer 脚本（21 文件 / +1108 -8）
+- 新增 `web-vitals@^4.2.4` 与 `VITE_ENABLE_PERF_BASELINE` 开关（默认 off）
+- 新增 `src/services/perfBaseline/`：collector facade + React Profiler harness（仅用于 fixture）
+- 扩展 `rendererDiagnostics` 双 bucket：non-perf 保持 200，perf 独立 1000
+- 新增 `src/test-fixtures/perf/` 与 `realtimePerfExtendedFixture.ts`
+- 新增 4 个采集脚本：long-list / composer / cold-start / aggregate
+- 扩展 `realtime-perf-report.ts` 增加 `--profile=extended` 与 quiet 模式
+
+### Commit 2 — docs(perf): baseline 报告与 follow-up backlog（17 文件 / +1123 -37）
+- 产出 `docs/perf/baseline.{md,json}` 与镜像 `docs/perf/history/v0.4.18-baseline.{md,json}` 锚点
+- 新增 `docs/perf/README.md` 说明 schema 与 Read Protocol
+- 完成 `add-runtime-perf-baseline/tasks.md` 全部 67 项打勾
+- 追加 `verification.md` 记录 19 个通过 check + 残留风险（darwin cold-start unsupported）
+- 种植 4 个 follow-up proposal：optimize-bundle-chunking / optimize-long-list-virtualization / optimize-realtime-event-batching / refactor-mega-hub-split
+
+### Commit 3 — refactor(claude-tests): Rust 测试拆分（3 文件 / +246 -238）
+- 把 Claude CLI command 构造测试从 `tests_core.rs` 拆到 `tests_command.rs`
+- `tests_core.rs` 瘦身至 2368 行，`check:large-files:gate` 报告 `found=0`
+
+## Validation
+
+- npm run typecheck — pass
+- npm run lint — pass
+- openspec validate add-runtime-perf-baseline --strict --no-interactive — valid
+- (历史 verification 已涵盖) npm run perf:baseline:all / perf:realtime:boundary-guard / check:heavy-test-noise / check:large-files:{near-threshold,gate} / cargo test engine::claude::tests_command
+
+## Residual Risk
+
+- darwin 上 cold-start `firstPaintMs` / `firstInteractiveMs` 在本脚本下 unsupported，已在 baseline 报告 Section B 显式记录；bundle gzip metrics 已采集。
+- `latest baseline.md` 与 `history/v0.4.18-baseline.md` 数据有差异（jsdom 抖动），符合 README §Read Protocol：latest 跟 HEAD，history 锚点 immutable。
+
+## Status
+
+[OK] **Completed** — 工作树干净，可推进 verify → archive。
+
+## Next Steps
+
+1. `/open-spec:verify add-runtime-perf-baseline`：implementation 与 spec 一致性校验
+2. `/open-spec:archive add-runtime-perf-baseline`：归档变更并 sync delta 到主 specs
+3. 进入 follow-up 阶段，推荐起跑顺序：realtime-event-batching → bundle-chunking → mega-hub-split → long-list-virtualization（理由：先做 baseline 数据可信度高且用户感知最强的项）
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d5c3b51e` | (see git log) |
+| `db794925` | (see git log) |
+| `3014c073` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

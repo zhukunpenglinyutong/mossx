@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 475
+- **Total Sessions**: 476
 - **Last Active**: 2026-05-16
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~1804 | Active |
+| `journal-13.md` | ~1886 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 476 | 2026-05-16 | 完成 add-runtime-perf-baseline 基线产出与三段式提交 | `d5c3b51e`, `db794925`, `3014c073` | `feature/v0.5` |
 | 475 | 2026-05-16 | 降低 Claude 上下文查询请求频率 | `742f4e75` | `feature/v0.5` |
 | 474 | 2026-05-15 | 稳定 Project Memory 面板转换测试时序 | `c6a7a456` | `feature/v0.4.18` |
 | 473 | 2026-05-15 | 发布前 OpenSpec 文档卫生收口 | `5bb8ad5b` | `feature/v0.4.18` |
