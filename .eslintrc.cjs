@@ -37,6 +37,19 @@ module.exports = {
         caughtErrorsIgnorePattern: '^_',
       },
     ],
+    '@typescript-eslint/no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          {
+            name: 'lucide-react',
+            message:
+              "Import icons from 'lucide-react/dist/esm/icons/{kebab-name}' to enable tree-shaking. Type imports (LucideIcon, LucideProps) are allowed via `import type`.",
+            allowTypeImports: true,
+          },
+        ],
+      },
+    ],
   },
   overrides: [
     {

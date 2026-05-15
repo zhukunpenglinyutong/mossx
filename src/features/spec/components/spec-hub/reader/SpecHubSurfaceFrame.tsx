@@ -1,13 +1,11 @@
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronRight,
-  ExternalLink,
-  PanelLeftClose,
-  PanelRightClose,
-  PanelRightOpen,
-} from "lucide-react";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import PanelLeftClose from "lucide-react/dist/esm/icons/panel-left-close";
+import PanelRightClose from "lucide-react/dist/esm/icons/panel-right-close";
+import PanelRightOpen from "lucide-react/dist/esm/icons/panel-right-open";
 import type { SpecHubProps } from "../../SpecHub.presentational";
 import {
   buildDetachedSpecHubSession,

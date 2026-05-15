@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  X,
-  ImagePlus,
-  Sparkles,
-  Loader2,
-  Calendar,
-  Clock3,
-  Repeat,
-  Settings2,
-  Hash,
-  GitBranch,
-  Link2,
-} from "lucide-react";
+import X from "lucide-react/dist/esm/icons/x";
+import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import Calendar from "lucide-react/dist/esm/icons/calendar";
+import Clock3 from "lucide-react/dist/esm/icons/clock-3";
+import Repeat from "lucide-react/dist/esm/icons/repeat";
+import Settings2 from "lucide-react/dist/esm/icons/settings-2";
+import Hash from "lucide-react/dist/esm/icons/hash";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Link2 from "lucide-react/dist/esm/icons/link-2";
 import type { EngineStatus, EngineType } from "../../../types";
 import type {
   KanbanNewThreadResultMode,

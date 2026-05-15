@@ -127,7 +127,7 @@
 
 ---
 
-### - [ ] P1-2. lucide-react 混合导入策略
+### - [x] P1-2. lucide-react 混合导入策略
 
 - **现状**：项目中 101 处使用 `lucide-react/dist/esm/icons/xxx`（正确摇树），但仍有 28 处用 `from "lucide-react"`（barrel import）
 - **示例文件**：`src/features/settings/components/AgentSettingsSection.tsx:4`
@@ -382,7 +382,7 @@
 ### 第二周（10 小时 - 系统性优化）
 
 - [x] P1-1 重型 Panel 代码分割
-- [ ] P1-2 lucide-react 导入统一（搭配 eslint-plugin no-restricted-imports）
+- [x] P1-2 lucide-react 导入统一（搭配 eslint-plugin no-restricted-imports）
 - [ ] P1-3 危险 `&&` 渲染重构（优先涉及 number/string 的）
 - [ ] P1-4 键盘事件统一调度
 - [ ] P1-5 Messages 添加 useDeferredValue

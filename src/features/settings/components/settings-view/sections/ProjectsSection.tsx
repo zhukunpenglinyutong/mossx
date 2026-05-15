@@ -3,7 +3,11 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from "@hello-p
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import { FolderOpen, GripVertical, MoreHorizontal, Pencil, Plus } from "lucide-react";
+import FolderOpen from "lucide-react/dist/esm/icons/folder-open";
+import GripVertical from "lucide-react/dist/esm/icons/grip-vertical";
+import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Plus from "lucide-react/dist/esm/icons/plus";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

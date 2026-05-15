@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { LayoutGrid, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
+import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { KanbanPanel, KanbanTask, KanbanTaskStatus } from "../types";
 
 type PanelCardProps = {

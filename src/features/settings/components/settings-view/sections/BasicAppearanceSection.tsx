@@ -1,39 +1,37 @@
 import type React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Activity,
-  AppWindow,
-  ArrowLeftRight,
-  Bot,
-  BookOpen,
-  Construction,
-  Eye,
-  FileEdit,
-  Focus,
-  Folder,
-  GitBranch,
-  Info,
-  LayoutList,
-  ListChecks,
-  MessageCircle,
-  MessageSquareQuote,
-  MessageSquareText,
-  Monitor,
-  Moon,
-  NotebookPen,
-  Palette,
-  PanelBottom,
-  PanelRightOpen,
-  PanelTop,
-  PanelsLeftRight,
-  Play,
-  RotateCcw,
-  Search,
-  Sun,
-  TerminalSquare,
-  Type,
-  type LucideIcon,
-} from "lucide-react";
+import Activity from "lucide-react/dist/esm/icons/activity";
+import AppWindow from "lucide-react/dist/esm/icons/app-window";
+import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
+import Bot from "lucide-react/dist/esm/icons/bot";
+import BookOpen from "lucide-react/dist/esm/icons/book-open";
+import Construction from "lucide-react/dist/esm/icons/construction";
+import Eye from "lucide-react/dist/esm/icons/eye";
+import FileEdit from "lucide-react/dist/esm/icons/file-edit";
+import Focus from "lucide-react/dist/esm/icons/focus";
+import Folder from "lucide-react/dist/esm/icons/folder";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Info from "lucide-react/dist/esm/icons/info";
+import LayoutList from "lucide-react/dist/esm/icons/layout-list";
+import ListChecks from "lucide-react/dist/esm/icons/list-checks";
+import MessageCircle from "lucide-react/dist/esm/icons/message-circle";
+import MessageSquareQuote from "lucide-react/dist/esm/icons/message-square-quote";
+import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text";
+import Monitor from "lucide-react/dist/esm/icons/monitor";
+import Moon from "lucide-react/dist/esm/icons/moon";
+import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
+import Palette from "lucide-react/dist/esm/icons/palette";
+import PanelBottom from "lucide-react/dist/esm/icons/panel-bottom";
+import PanelRightOpen from "lucide-react/dist/esm/icons/panel-right-open";
+import PanelTop from "lucide-react/dist/esm/icons/panel-top";
+import PanelsLeftRight from "lucide-react/dist/esm/icons/panels-left-right";
+import Play from "lucide-react/dist/esm/icons/play";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import Search from "lucide-react/dist/esm/icons/search";
+import Sun from "lucide-react/dist/esm/icons/sun";
+import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
+import Type from "lucide-react/dist/esm/icons/type";
+import type { LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_OPEN_APP_ID,

@@ -8,20 +8,18 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { Draggable } from "@hello-pangea/dnd";
-import {
-  ArrowRightLeft,
-  Ban,
-  CalendarCheck2,
-  CalendarClock,
-  Link2,
-  Loader2,
-  MoreHorizontal,
-  Pause,
-  Pencil,
-  Play,
-  Trash2,
-  X,
-} from "lucide-react";
+import ArrowRightLeft from "lucide-react/dist/esm/icons/arrow-right-left";
+import Ban from "lucide-react/dist/esm/icons/ban";
+import CalendarCheck2 from "lucide-react/dist/esm/icons/calendar-check-2";
+import CalendarClock from "lucide-react/dist/esm/icons/calendar-clock";
+import Link2 from "lucide-react/dist/esm/icons/link-2";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
+import Pause from "lucide-react/dist/esm/icons/pause";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Play from "lucide-react/dist/esm/icons/play";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import X from "lucide-react/dist/esm/icons/x";
 import type { KanbanTask, KanbanTaskStatus } from "../types";
 import type { EngineType } from "../../../types";
 import { EngineIcon } from "../../engine/components/EngineIcon";
