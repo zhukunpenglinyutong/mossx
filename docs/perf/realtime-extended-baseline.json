@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-05-15T18:02:52.976Z",
+  "source": "realtime-extended",
+  "metrics": [
+    {
+      "scenario": "S-RS-FT",
+      "metric": "firstTokenLatency",
+      "value": 5000,
+      "unit": "ms",
+      "notes": "turn start to first assistant delta"
+    },
+    {
+      "scenario": "S-RS-FT",
+      "metric": "interTokenJitterP95",
+      "value": 920,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-RS-PE",
+      "metric": "dedupHitRatio",
+      "value": 0.25,
+      "unit": "ratio"
+    },
+    {
+      "scenario": "S-RS-PE",
+      "metric": "assemblerLatency",
+      "value": 5.15,
+      "unit": "ms",
+      "notes": "replay reducer-path proxy latency"
+    }
+  ],
+  "residualRisks": []
+}

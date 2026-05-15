@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-05-15T18:03:24.059Z",
+  "source": "cold-start",
+  "metrics": [
+    {
+      "scenario": "S-CS-COLD",
+      "metric": "bundleSizeMain",
+      "value": 1858804,
+      "unit": "bytes",
+      "notes": "App-Bs9HXFN_.js"
+    },
+    {
+      "scenario": "S-CS-COLD",
+      "metric": "bundleSizeVendor",
+      "value": 163596,
+      "unit": "bytes",
+      "notes": "index-B1frhHww.js"
+    },
+    {
+      "scenario": "S-CS-COLD",
+      "metric": "firstPaintMs",
+      "value": null,
+      "unit": "ms",
+      "unsupportedReason": "Tauri webview headless cold-start timing is not available in this script; bundle baseline is recorded."
+    },
+    {
+      "scenario": "S-CS-COLD",
+      "metric": "firstInteractiveMs",
+      "value": null,
+      "unit": "ms",
+      "unsupportedReason": "Tauri webview headless cold-start timing is not available in this script; bundle baseline is recorded."
+    }
+  ],
+  "notes": [
+    "platform=darwin"
+  ]
+}

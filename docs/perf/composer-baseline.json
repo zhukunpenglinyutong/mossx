@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-05-15T18:02:51.655Z",
+  "source": "composer-input",
+  "metrics": [
+    {
+      "scenario": "S-CI-50",
+      "metric": "keystrokeToCommitP95",
+      "value": 0.09,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-CI-50",
+      "metric": "inputEventLossCount",
+      "value": 0,
+      "unit": "count"
+    },
+    {
+      "scenario": "S-CI-50",
+      "metric": "compositionToCommit",
+      "value": 0,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-CI-100-IME",
+      "metric": "keystrokeToCommitP95",
+      "value": 0.03,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-CI-100-IME",
+      "metric": "inputEventLossCount",
+      "value": 0,
+      "unit": "count"
+    },
+    {
+      "scenario": "S-CI-100-IME",
+      "metric": "compositionToCommit",
+      "value": 0.11,
+      "unit": "ms"
+    }
+  ]
+}
