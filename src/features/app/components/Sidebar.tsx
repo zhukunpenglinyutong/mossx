@@ -1011,12 +1011,12 @@ export function Sidebar({
     pinnedThreadsVersion,
   ]);
 
-  const scrollFadeDeps = useMemo(
-    () => [groupedWorkspaces, threadsByWorkspace, expandedWorkspaces, normalizedQuery],
-    [groupedWorkspaces, threadsByWorkspace, expandedWorkspaces, normalizedQuery],
+  const { sidebarBodyRef, scrollFade, updateScrollFade } = useSidebarScrollFade(
+    groupedWorkspaces,
+    threadsByWorkspace,
+    expandedWorkspaces,
+    normalizedQuery,
   );
-  const { sidebarBodyRef, scrollFade, updateScrollFade } =
-    useSidebarScrollFade(scrollFadeDeps);
 
   const filteredGroupedWorkspaces = useMemo(
     () =>
