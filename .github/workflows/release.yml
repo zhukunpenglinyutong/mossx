@@ -47,6 +47,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          cache-bin: false
 
       - name: Install CMake
         run: brew install cmake
@@ -203,6 +204,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          cache-bin: false
 
       - name: install frontend dependencies
         run: npm ci
@@ -279,6 +281,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          cache-bin: false
 
       - name: Install dependencies
         run: npm ci
