@@ -1711,3 +1711,48 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 474: 稳定 Project Memory 面板转换测试时序
+
+**Date**: 2026-05-15
+**Task**: 稳定 Project Memory 面板转换测试时序
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+修复 ProjectMemoryPanel 转换手动笔记测试中的 async UI 竞态，等待 review action 收尾后再点击转换按钮。
+
+### Main Changes
+
+## 完成内容
+- 修复 `src/features/project-memory/components/ProjectMemoryPanel.test.tsx` 中 review state -> convert manual note 测试的时序竞态。
+- 在点击 `Keep` 后等待 `Convert to manual note` 按钮恢复 enabled，再触发转换动作。
+- 将转换后的 `updateMemory(... reviewState: converted)` 断言放入 `waitFor`，与 async UI 更新模型对齐。
+
+## 验证
+- `npx vitest run src/features/project-memory/components/ProjectMemoryPanel.test.tsx -t "updates review state"`
+- `npx vitest run --maxWorkers 1 --minWorkers 1 src/features/parallel/hooks/useParallelWorkspace.test.ts src/features/plan/components/PlanPanel.test.tsx src/features/project-memory/components/ProjectMemoryPanel.test.tsx src/features/project-memory/hooks/useProjectMemory.test.tsx`
+
+## 备注
+- 未修改生产逻辑。
+- 另行判断 release macOS aarch64 打包失败与该测试修复无关，更像 runner Rust toolchain/PATH 异常。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c6a7a456` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
