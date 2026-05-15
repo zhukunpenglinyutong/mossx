@@ -1402,3 +1402,58 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 467: 增强 Prompt Enhancer Claude 失败诊断与兜底
+
+**Date**: 2026-05-15
+**Task**: 增强 Prompt Enhancer Claude 失败诊断与兜底
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+- Fixed Prompt Enhancer Claude failure handling so retryable Claude/runtime failures automatically fall back to Codex with an isolated read-only session.
+- Improved Claude CLI non-zero exit diagnostics when stdout/stderr are empty by including input format, hook flag, and permission mode metadata.
+- Preserved primary Claude diagnostics when Codex fallback fails or returns an empty rewrite.
+
+## Updated Files
+- `src-tauri/src/engine/claude.rs`
+- `src-tauri/src/engine/claude/tests_stream.rs`
+- `src/features/composer/components/ChatInputBox/hooks/usePromptEnhancer.ts`
+- `src/features/composer/components/ChatInputBox/hooks/usePromptEnhancer.test.tsx`
+
+## Validation
+- `npx eslint src/features/composer/components/ChatInputBox/hooks/usePromptEnhancer.ts src/features/composer/components/ChatInputBox/hooks/usePromptEnhancer.test.tsx`
+- `npx vitest run src/features/composer/components/ChatInputBox/hooks/usePromptEnhancer.test.tsx`
+- `cargo test --manifest-path src-tauri/Cargo.toml send_message_reports_exit_metadata_when_claude_fails_without_output`
+- `node --test scripts/check-large-files.test.mjs`
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `npm run check:large-files:near-threshold`
+- `npm run check:large-files:gate`
+- `npm run check:heavy-test-noise`
+- `npm run typecheck`
+- `git diff --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `541f9058` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
