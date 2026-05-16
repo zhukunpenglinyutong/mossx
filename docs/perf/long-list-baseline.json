@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-05-15T18:02:50.392Z",
+  "source": "long-list",
+  "metrics": [
+    {
+      "scenario": "S-LL-200",
+      "metric": "commitDurationP50",
+      "value": 10.15,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-200",
+      "metric": "commitDurationP95",
+      "value": 10.15,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-200",
+      "metric": "firstPaintAfterMount",
+      "value": 37.22,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-500",
+      "metric": "commitDurationP50",
+      "value": 14.27,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-500",
+      "metric": "commitDurationP95",
+      "value": 14.27,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-500",
+      "metric": "firstPaintAfterMount",
+      "value": 33.73,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-1000",
+      "metric": "commitDurationP50",
+      "value": 17.94,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-1000",
+      "metric": "commitDurationP95",
+      "value": 17.94,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-1000",
+      "metric": "firstPaintAfterMount",
+      "value": 37.45,
+      "unit": "ms"
+    },
+    {
+      "scenario": "S-LL-1000",
+      "metric": "scrollFrameDropPct",
+      "value": 0,
+      "unit": "%",
+      "notes": "jsdom proxy; browser scroll gate is follow-up"
+    }
+  ]
+}

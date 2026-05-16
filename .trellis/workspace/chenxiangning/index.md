@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-13.md`
-- **Total Sessions**: 474
-- **Last Active**: 2026-05-15
+- **Active File**: `journal-14.md`
+- **Total Sessions**: 479
+- **Last Active**: 2026-05-16
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~1758 | Active |
+| `journal-14.md` | ~154 | Active |
+| `journal-13.md` | ~1947 | Archived |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +42,11 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 479 | 2026-05-16 | PR #564 与 chore/bump-version-0.5 语义融合 | `5fa60b2b` | `feature/v0.5` |
+| 478 | 2026-05-16 | 修复 Composer.rewind-confirm.test 在 CI 上的 waitFor 超时 | `1500a69a` | `feature/v0.5` |
+| 477 | 2026-05-16 | Archive add-runtime-perf-baseline 并同步主 spec | `8bfe9ccf` | `feature/v0.5` |
+| 476 | 2026-05-16 | 完成 add-runtime-perf-baseline 基线产出与三段式提交 | `d5c3b51e`, `db794925`, `3014c073` | `feature/v0.5` |
+| 475 | 2026-05-16 | 降低 Claude 上下文查询请求频率 | `742f4e75` | `feature/v0.5` |
 | 474 | 2026-05-15 | 稳定 Project Memory 面板转换测试时序 | `c6a7a456` | `feature/v0.4.18` |
 | 473 | 2026-05-15 | 发布前 OpenSpec 文档卫生收口 | `5bb8ad5b` | `feature/v0.4.18` |
 | 472 | 2026-05-15 | 稳定核心运行时与实时契约 | `f4d60742` | `feature/v0.4.18` |

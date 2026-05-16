@@ -112,6 +112,34 @@ describe("rendererDiagnostics", () => {
     expect(persistedEntries[199]).toMatchObject({ label: "window/pageshow" });
   });
 
+  it("keeps perf diagnostics in an independent 1000-entry bucket", async () => {
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([
+      ...Array.from({ length: 200 }, (_, index) => ({
+        timestamp: index,
+        label: `old-${index}`,
+        payload: { index },
+      })),
+      ...Array.from({ length: 1000 }, (_, index) => ({
+        timestamp: 1_000 + index,
+        label: "perf.web-vital",
+        payload: { index },
+      })),
+    ]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.appendRendererPerfDiagnostic("perf.web-vital", { index: 1000 });
+
+    const [, , persistedValue] = clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    expect(Array.isArray(persistedValue)).toBe(true);
+    const persistedEntries = persistedValue as Array<{ label: string; payload: { index?: number } }>;
+    expect(persistedEntries).toHaveLength(1200);
+    expect(persistedEntries.filter((entry) => entry.label.startsWith("perf."))).toHaveLength(1000);
+    expect(persistedEntries.filter((entry) => !entry.label.startsWith("perf."))).toHaveLength(200);
+    expect(persistedEntries.some((entry) => entry.payload.index === 0 && entry.label === "perf.web-vital")).toBe(false);
+    expect(persistedEntries.some((entry) => entry.payload.index === 1000 && entry.label === "perf.web-vital")).toBe(true);
+  });
+
   it("falls back to an empty diagnostics list when persisted cache is malformed", async () => {
     clientStorageMocks.isPreloaded.mockReturnValue(true);
     clientStorageMocks.getClientStoreSync.mockReturnValue({ broken: true });
@@ -129,6 +157,31 @@ describe("rendererDiagnostics", () => {
       ],
       { immediate: true },
     );
+  });
+
+  it("ignores malformed entries inside persisted diagnostic arrays", async () => {
+    testLocalStorage.setItem(
+      EARLY_RENDERER_DIAGNOSTICS_STORAGE_KEY,
+      JSON.stringify([
+        { timestamp: 1, label: "bootstrap/valid", payload: { ok: true } },
+        { timestamp: 2, label: null, payload: { broken: true } },
+        { timestamp: "3", label: "bootstrap/broken", payload: { broken: true } },
+      ]),
+    );
+    clientStorageMocks.isPreloaded.mockReturnValue(true);
+    clientStorageMocks.getClientStoreSync.mockReturnValue([
+      { timestamp: 4, label: "stored/valid", payload: { ok: true } },
+      { timestamp: 5, label: { broken: true }, payload: { broken: true } },
+    ]);
+    const diagnostics = await import("./rendererDiagnostics");
+
+    diagnostics.flushRendererDiagnosticsBuffer();
+
+    const [, , persistedEntries] = clientStorageMocks.writeClientStoreValue.mock.calls[0] ?? [];
+    expect(persistedEntries).toEqual([
+      expect.objectContaining({ label: "bootstrap/valid" }),
+      expect.objectContaining({ label: "stored/valid" }),
+    ]);
   });
 
   it("installs lifecycle listeners only once", async () => {

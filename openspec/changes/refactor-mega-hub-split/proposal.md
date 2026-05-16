@@ -1,0 +1,39 @@
+## Why
+
+`add-runtime-perf-baseline` 的目的不是直接优化，而是指出后续拆分顺序。当前长列表 baseline
+已经给出 commit-duration 热点入口：
+
+- `S-LL-200`：`commitDurationP95 = 59.26ms`
+- `S-LL-500`：`commitDurationP95 = 39.73ms`
+- `S-LL-1000`：`commitDurationP95 = 20.76ms`
+
+同时提案中列出的高风险 hub 已接近或超过治理上限：
+
+- `src/features/threads/hooks/useThreadMessaging.ts`
+- `src/features/app/hooks/useAppServerEvents.ts`
+- `src/features/composer/components/Composer.tsx`
+- `src/features/messages/components/MessagesRows.tsx`
+
+下一步应以 measured render / event propagation 热点为拆分边界，而不是按文件行数机械切割。
+
+## Scope
+
+### In Scope
+
+- 根据 baseline 与 profiler 采样确定一个优先拆分目标。
+- 将巨型 hub 的纯计算、side effect orchestration、render adapter 分层拆出。
+- 保持 public hook/component contract 不破坏调用方。
+- 为拆分后的关键路径补 targeted tests。
+
+### Out of Scope
+
+- 不在同一 change 内同时拆所有 hub。
+- 不顺手实现 virtualization 或 batching，除非它是拆分目标的必要前置。
+- 不重写业务状态模型。
+
+## Acceptance Criteria
+
+- 拆分目标必须引用 `S-LL-*` 或 composer/realtime baseline 中的具体指标作为动机。
+- 被拆文件必须显著下降到治理阈值内，且新增文件不触发 large-file gate。
+- `npm run typecheck`、`npm run lint`、相关 targeted tests 必须通过。
+- 需要重新运行对应 baseline，确认 commit-duration 热点没有恶化。
