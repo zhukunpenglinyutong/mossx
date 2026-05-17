@@ -10,6 +10,8 @@
 当前可执行的优化入口是 bundle composition，而不是伪造 webview timing。下一步应先把 main bundle
 拆分成可解释的 domain chunks，再决定是否引入更重的 Tauri/webview cold-start instrumentation。
 
+治理关联：这不是普通性能微调，而是 harness 治理层的 **delivery governance blocker**。SpecHub、audit trail、cost/budget、policy log、admin surface 都会增加前端体积；如果低频治理面板继续进入首屏 bundle，治理能力越完善，Tauri 启动越慢。这个 change 的职责是为治理 surface 增长建立可解释 chunk 边界。
+
 ## Scope
 
 ### In Scope
@@ -24,6 +26,7 @@
 - 不在本 change 内引入 Playwright/Lighthouse 作为强依赖。
 - 不改变运行时 feature 语义。
 - 不处理 long-list / realtime / hub split。
+- 不把治理功能本身改成 lazy-only；只移动低频 surface，不破坏首屏治理信号可见性。
 
 ## Acceptance Criteria
 
@@ -31,3 +34,6 @@
 - `bundleSizeVendor = 163595 bytes` 不得因错误 chunking 明显膨胀。
 - `firstPaintMs/firstInteractiveMs` unsupported 状态必须继续显式记录，不得静默填假值。
 - 必须运行 `npm run perf:cold-start:baseline` 与 `npm run perf:baseline:aggregate`。
+- 若 chunking 触及 tests，必须等价满足 `.github/workflows/heavy-test-noise-sentry.yml` 的 parser tests 与 `npm run check:heavy-test-noise`。
+- chunk plan 不得制造新的近阈值 source/config 文件，必须等价满足 `.github/workflows/large-file-governance.yml` 的 parser、near-threshold 与 hard gate。
+- chunking/lazy import 不得引入平台专属 dynamic import path、case-sensitive path 假设或 POSIX-only resource path；Win/macOS/Linux 构建产物必须等价。

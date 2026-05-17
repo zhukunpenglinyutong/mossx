@@ -1,7 +1,7 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-05-15T23:20:17+08:00
+- Updated At: 2026-05-17T15:20:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
 
 ## Domain
@@ -13,7 +13,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current workspace state: active changes = `3`, archive changes = `302`, main specs = `257`
+- Current workspace state: active changes = `11`, archive changes = `303`, main specs = `258`
 
 ## Entry Surfaces
 
@@ -41,9 +41,27 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Active Changes
 
-- `add-codex-structured-launch-profile`
-- `add-runtime-perf-baseline`
+### Harness Governance Design Set
+
+- `formalize-engine-runtime-contract`
+- `add-engine-capability-matrix-spec`
+- `evolve-context-ledger-to-cost-budget`
+- `evolve-checkpoint-to-policy-chain`
+- `add-agent-domain-event-schema`
+
+### Harness Governance Substrate Set
+
+- `refactor-mega-hub-split`
+- `optimize-realtime-event-batching`
+- `optimize-long-list-virtualization`
+- `optimize-bundle-chunking`
+
+### Other Active Changes
+
 - `stabilize-core-runtime-and-realtime-contracts`
+- `add-codex-structured-launch-profile`
+
+> Harness governance set status: proposal/design/tasks/spec deltas are present and should be treated as the current design baseline. Implementation remains unstarted (`0/x tasks`) and should begin with the contract/legal layer before feature integration. All governance changes MUST preserve `.github/workflows/heavy-test-noise-sentry.yml`, `.github/workflows/large-file-governance.yml`, and ubuntu/macos/windows cross-platform parity.
 
 > Current status should be read from each change directory itself. `project.md` tracks workspace inventory and governance boundaries, not task-by-task execution detail.
 
@@ -89,6 +107,8 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Update History
 
+- 2026-05-17: Hardened harness governance implementation constraints to v1.6 by making heavy-test-noise sentry, large-file governance sentry, and Win/macOS/Linux compatibility explicit requirements across the governance change set; corrected `formalize-engine-runtime-contract` task wording so runtime contract legislation is not confused with capability matrix work.
+- 2026-05-17: Added and calibrated the harness governance design set (`formalize-engine-runtime-contract`, `add-engine-capability-matrix-spec`, `evolve-context-ledger-to-cost-budget`, `evolve-checkpoint-to-policy-chain`, `add-agent-domain-event-schema`) plus substrate blockers (`refactor-mega-hub-split`, `optimize-realtime-event-batching`, `optimize-long-list-virtualization`, `optimize-bundle-chunking`); refreshed workspace inventory after the v1.5 governance design closure (specs=258, archive=303, active=11).
 - 2026-05-15: Archived eight verified changes (`fix-claude-repeat-turn-first-token-latency`, `harden-claude-stream-json-liveness`, `fix-claude-pending-transcript-reconciliation`, `repair-project-memory-reference-retrieval-integrity`, `harden-codex-silent-turn-liveness`, `harden-session-start-and-claude-list-window`, `fix-claude-sidebar-native-session-continuity`, `improve-progressive-file-tree-loading`) after syncing their delta specs into main specs; resolved the overlapping `claude-session-sidebar-state-parity` updates by preserving both sidebar continuity and configured display-window requirements; refreshed workspace inventory (specs=257, archive=302, active=1).
 - 2026-05-15: Refreshed active-change inventory after adding `add-runtime-perf-baseline` and detecting `stabilize-core-runtime-and-realtime-contracts`; current workspace inventory is specs=257, archive=302, active=3.
 - 2026-05-14: Archived `clean-openspec-main-spec-hygiene` after replacing archive-generated Purpose placeholders, removing the empty `claude-session-engine-resolution` capability directory, and adding main-spec hygiene governance; refreshed workspace inventory (specs=251, archive=289, active=2).
